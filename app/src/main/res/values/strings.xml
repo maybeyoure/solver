@@ -1,0 +1,41 @@
+<resources>
+    <string name="app_name">Транспортная задача</string>
+
+    <!-- Заголовки -->
+    <string name="input_header">Заполните матрицу тарифов, выберите метод нахождения начального плана</string>
+
+    <!-- Кнопки -->
+    <string name="btn_next">Далее</string>
+
+    <!-- Заголовки таблицы -->
+    <string name="header_supplier">П%1$d</string>
+    <string name="header_store">M%1$d</string>
+    <string name="header_supplies">Запасы</string>
+    <string name="header_demands">Потребности</string>
+
+    <!-- Спиннеры -->
+    <string-array name="methods">
+        <item>Метод Фогеля</item>
+        <item>Метод двойного предпочтения</item>
+    </string-array>
+
+    <string-array name="objectives">
+        <item>Минимальные затраты</item>
+        <item>Максимальная прибыль</item>
+    </string-array>
+
+    <!-- Сообщения об ошибках -->
+    <string name="error_select_dimensions">Пожалуйста, выберите количество строк и столбцов</string>
+    <string name="error_invalid_input">Пожалуйста, заполните все поля корректно</string>
+    <string name="error_unbalanced">Сумма запасов должна быть равна сумме потребностей</string>
+    <string name="error_invalid_matrix">Неверные размерности матрицы затрат</string>
+    <string name="error_data">Ошибка в введенных данных: %1$s</string>
+    <string name="error_invalid_dimensions">Неверные размерности задачи</string>
+
+    <!-- Результаты -->
+    <string name="solution_method">Метод решения: %1$s</string>
+    <string name="optimization_type">Тип оптимизации: %1$s</string>
+    <string name="matrix_size">Размерность: %1$dx%2$d</string>
+    <string name="total_supply">Сумма запасов: %1$.2f</string>
+    <string name="total_demand">Сумма потребностей: %1$.2f</string>
+</resources>
