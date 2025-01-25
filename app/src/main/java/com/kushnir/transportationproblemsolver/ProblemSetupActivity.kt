@@ -2,6 +2,7 @@ package com.kushnir.transportationproblemsolver
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.Toast
@@ -20,28 +21,31 @@ class ProblemSetupActivity : AppCompatActivity() {
         spinnerCols = findViewById(R.id.spinner_cols)
         btnNext = findViewById(R.id.btn_next)
 
-        btnNext.setOnClickListener {
-            if (validateInput()) {
-                val numRows = spinnerRows.selectedItem.toString().toInt()
-                val numCols = spinnerCols.selectedItem.toString().toInt()
+        // Настройка адаптеров для спиннеров
+        val sizes = (2..10).toList()
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sizes)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
 
-                val intent = Intent(this, ProblemInputActivity::class.java).apply {
-                    putExtra("numRows", numRows)
-                    putExtra("numCols", numCols)
-                }
-                startActivity(intent)
-            } else {
-                Toast.makeText(
-                    this,
-                    getString(R.string.error_select_dimensions),
-                    Toast.LENGTH_SHORT
-                ).show()
+        spinnerRows.adapter = adapter
+        spinnerCols.adapter = adapter
+
+        spinnerRows.prompt = getString(R.string.select_size_prompt)
+        spinnerCols.prompt = getString(R.string.select_size_prompt)
+
+        btnNext.setOnClickListener {
+            val numRows = spinnerRows.selectedItem?.toString()?.toInt() ?: 2
+            val numCols = spinnerCols.selectedItem?.toString()?.toInt() ?: 2
+
+            val intent = Intent(this, ProblemInputActivity::class.java).apply {
+                putExtra("numRows", numRows)
+                putExtra("numCols", numCols)
             }
+            startActivity(intent)
         }
+
     }
 
     private fun validateInput(): Boolean {
-        return spinnerRows.selectedItemPosition > 0 &&
-                spinnerCols.selectedItemPosition > 0
+        return true  // всегда возвращаем значение по умолчанию 2
     }
 }

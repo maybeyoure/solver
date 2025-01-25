@@ -5,13 +5,16 @@
     android:orientation="vertical"
     android:padding="16dp">
 
+
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Решение транспортной задачи"
+        android:layout_marginBottom="24dp"
+        android:gravity="center"
+        android:text="@string/header_reshenieTZ"
         android:textSize="24sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="24dp"/>
+        android:textStyle="bold" />
+
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -22,13 +25,16 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Количество строк (поставщики)"/>
+            android:textSize="20sp"
+            android:text="@string/header_rows" />
 
         <Spinner
             android:id="@+id/spinner_rows"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:entries="@array/problem_sizes"/>
+            android:layout_height="60dp"
+            android:textSize="20sp"
+            android:spinnerMode="dropdown"/>
+
 
     </LinearLayout>
 
@@ -42,13 +48,15 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Количество столбцов (магазины)"/>
+            android:textSize="20sp"
+            android:text="@string/header_columns"/>
 
         <Spinner
             android:id="@+id/spinner_cols"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:entries="@array/problem_sizes"/>
+            android:layout_height="60dp"
+            android:textSize="20sp"
+            android:spinnerMode="dropdown"/>
 
     </LinearLayout>
 
@@ -56,7 +64,8 @@
         android:id="@+id/btn_next"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Далее"
-        android:layout_marginTop="24dp"/>
+        android:textSize="20sp"
+        android:text="@string/btn_next"
+        android:layout_marginTop="34dp"/>
 
 </LinearLayout>

@@ -18,40 +18,42 @@ class ProblemInputActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_problem_input)
 
-        // Инициализация views
         tableLayout = findViewById(R.id.table_costs)
         btnSolve = findViewById(R.id.btn_solve)
         spinnerMethod = findViewById(R.id.spinner_method)
         spinnerObjective = findViewById(R.id.spinner_objective)
 
-        // Получение размерности из предыдущего активити
         val numRows = intent.getIntExtra("numRows", 0)
         val numCols = intent.getIntExtra("numCols", 0)
 
-        if (numRows <= 0 || numCols <= 0) {
-            Toast.makeText(this, getString(R.string.error_invalid_dimensions), Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
-
-        // Инициализация массивов для хранения EditText
         costsMatrix = Array(numRows) { Array(numCols) { EditText(this) } }
         suppliesInputs = Array(numRows) { EditText(this) }
         demandsInputs = Array(numCols) { EditText(this) }
+        val methods = listOf("Метод двойного предпочтения", "Метод Фогеля")
+        val objectives = listOf("Минимальные затраты", "Максимальная прибыль")
+
+        val methodAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, methods)
+        val objectiveAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, objectives)
+
+        methodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        objectiveAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+
+        spinnerMethod.adapter = methodAdapter
+        spinnerObjective.adapter = objectiveAdapter
+
+        spinnerMethod.prompt = getString(R.string.select_method_prompt)
+        spinnerObjective.prompt = getString(R.string.select_objective_prompt)
 
         createTable(numRows, numCols)
-        setupSpinners()
+        val btnBack: ImageButton = findViewById(R.id.btn_back)
+        btnBack.setOnClickListener {
+            onBackPressed()
+        }
 
         btnSolve.setOnClickListener {
             if (validateInput()) {
                 try {
                     val problem = createProblem()
-
-                    if (!problem.isBalanced()) {
-                        Toast.makeText(this, getString(R.string.error_unbalanced), Toast.LENGTH_LONG).show()
-                        return@setOnClickListener
-                    }
-
                     val intent = Intent(this, SolutionActivity::class.java).apply {
                         putExtra("problem", problem)
                         putExtra("methodType", spinnerMethod.selectedItem.toString())
@@ -64,28 +66,6 @@ class ProblemInputActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, getString(R.string.error_invalid_input), Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    private fun setupSpinners() {
-        // Настройка спиннера для метода решения
-        ArrayAdapter.createFromResource(
-            this,
-            R.array.methods,
-            android.R.layout.simple_spinner_item
-        ).also { adapter ->
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            spinnerMethod.adapter = adapter
-        }
-
-        // Настройка спиннера для цели оптимизации
-        ArrayAdapter.createFromResource(
-            this,
-            R.array.objectives,
-            android.R.layout.simple_spinner_item
-        ).also { adapter ->
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            spinnerObjective.adapter = adapter
         }
     }
 

@@ -12,25 +12,18 @@
     <string name="header_store">M%1$d</string>
     <string name="header_supplies">Запасы</string>
     <string name="header_demands">Потребности</string>
-
-    <!-- Спиннеры -->
-    <string-array name="methods">
-        <item>Метод Фогеля</item>
-        <item>Метод двойного предпочтения</item>
-    </string-array>
-
-    <string-array name="objectives">
-        <item>Минимальные затраты</item>
-        <item>Максимальная прибыль</item>
-    </string-array>
+    <string name="header_rows">Количество строк</string>
+    <string name="header_columns">Количество столбцов</string>
+    <string name="header_reshenieTZ">Решение транспортной задачи</string>
+    <string name="select_size_prompt">Выберите размер</string>
+    <string name="select_method_prompt">Выберите метод</string>
+    <string name="select_objective_prompt">Целевая функция</string>
 
     <!-- Сообщения об ошибках -->
-    <string name="error_select_dimensions">Пожалуйста, выберите количество строк и столбцов</string>
+    <string name="error_select_method_objective">Выберите метод решения и целевую функцию</string>
     <string name="error_invalid_input">Пожалуйста, заполните все поля корректно</string>
-    <string name="error_unbalanced">Сумма запасов должна быть равна сумме потребностей</string>
-    <string name="error_invalid_matrix">Неверные размерности матрицы затрат</string>
+    <string name="error_invalid_dimensions">Пожалуйста, выберите количество строк и столбцов</string>
     <string name="error_data">Ошибка в введенных данных: %1$s</string>
-    <string name="error_invalid_dimensions">Неверные размерности задачи</string>
 
     <!-- Результаты -->
     <string name="solution_method">Метод решения: %1$s</string>
@@ -38,4 +31,14 @@
     <string name="matrix_size">Размерность: %1$dx%2$d</string>
     <string name="total_supply">Сумма запасов: %1$.2f</string>
     <string name="total_demand">Сумма потребностей: %1$.2f</string>
+    <string name="fictive_supplier">Добавлен фиктивный поставщик П%1$d</string>
+    <string name="fictive_store">Добавлен фиктивный магазин М%1$d</string>
+    <string name="total_cost">Общая стоимость перевозок: %1$.2f</string>
+    <string name="balance_check">Проверим необходимое и достаточное условие разрешимости задачи.\n∑a = %1$.0f\n∑b = %2$.0f</string>
+    <string name="balance_result">Условие баланса соблюдается. Запасы равны потребностям. Следовательно, модель транспортной задачи является %1$s.</string>
+    <string name="step_description">Шаг %1$d: Искомый элемент находится в клетке (%2$d;%3$d) и равен c%2$d%3$d=%4$.1f</string>
+    <string name="distribution_description">x%1$d%2$d = min(%3$.1f, %4$.1f) = %5$.1f</string>
+    <string name="fictive_supplier_added">Добавляем фиктивного поставщика П%1$d с запасом %2$.1f</string>
+    <string name="fictive_store_added">Добавляем фиктивный магазин М%1$d с потребностью %2$.1f</string>
+
 </resources>
