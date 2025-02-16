@@ -1,5 +1,6 @@
 package com.kushnir.transportationproblemsolver
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.TableLayout
 import android.widget.TableRow
@@ -10,6 +11,8 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.util.Log
 import android.widget.Toast
+import com.kushnir.transportationproblemsolver.solvers.DoublePreferenceSolver
+import com.kushnir.transportationproblemsolver.solvers.FogelSolver
 
 class SolutionActivity : AppCompatActivity() {
     private lateinit var balanceConditionText: TextView
@@ -37,10 +40,14 @@ class SolutionActivity : AppCompatActivity() {
             // Проверка баланса
             displayBalanceCheck(problem)
 
-            // Пошаговое решение
-            val solutionSteps = problem.solveByDoublePreferenceWithSteps()
-            displaySolutionSteps(solutionSteps, problem)
+            // Получаем метод решения, если не передан - берем первый метод из массива
+            val methodType = intent.getStringExtra("methodType") ?: resources.getStringArray(R.array.methods)[0]
 
+            // Используем метод solveWithSteps из класса TransportationProblem
+            val solutionSteps = problem.solveWithSteps(this, methodType)
+
+            // Отображаем шаги решения
+            displaySolutionSteps(solutionSteps, problem)
         } catch (e: Exception) {
             Log.e("SolutionActivity", "Error in onCreate", e)
             Toast.makeText(this, "Произошла ошибка: ${e.message}", Toast.LENGTH_SHORT).show()

@@ -1,5 +1,8 @@
 package com.kushnir.transportationproblemsolver
 data class SolutionStep(
+    val stepNumber: Int = 0,
+    val description: String,
+
     val selectedRow: Int,
     val selectedCol: Int,
     val quantity: Double,

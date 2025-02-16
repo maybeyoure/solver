@@ -18,6 +18,7 @@
     <string name="select_size_prompt">Выберите размер</string>
     <string name="select_method_prompt">Выберите метод</string>
     <string name="select_objective_prompt">Целевая функция</string>
+    <string name="default_method">Метод двойного предпочтения</string>
 
     <!-- Сообщения об ошибках -->
     <string name="error_select_method_objective">Выберите метод решения и целевую функцию</string>

@@ -28,6 +28,8 @@ class ProblemSetupActivity : AppCompatActivity() {
 
         spinnerRows.adapter = adapter
         spinnerCols.adapter = adapter
+        spinnerRows.setSelection(0)
+        spinnerCols.setSelection(0)
 
         spinnerRows.prompt = getString(R.string.select_size_prompt)
         spinnerCols.prompt = getString(R.string.select_size_prompt)
