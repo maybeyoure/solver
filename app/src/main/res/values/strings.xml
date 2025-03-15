@@ -19,6 +19,11 @@
     <string name="select_method_prompt">Выберите метод</string>
     <string name="select_objective_prompt">Целевая функция</string>
     <string name="default_method">Метод двойного предпочтения</string>
+    <string name="header_row_penalties">Штрафы строк</string>
+    <string name="header_col_penalties">Штрафы столбцов</string>
+    <string name="vogel_step_description">Шаг %1$d: Выбираем клетку (%2$d;%3$d) на основе максимального штрафа %4$s (штраф = %5$.1f). Значение тарифа c%2$d%3$d=%6$.1f</string>
+    <string name="vogel_penalty_description">Используем штраф %1$s %2$d равный %3$.1f (разница между двумя наименьшими тарифами)</string>
+    <string name="vogel_cell_selection">В выбранной строке/столбце находим ячейку с минимальным тарифом</string>
 
     <!-- Сообщения об ошибках -->
     <string name="error_select_method_objective">Выберите метод решения и целевую функцию</string>

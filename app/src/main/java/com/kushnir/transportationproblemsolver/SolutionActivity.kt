@@ -1,5 +1,5 @@
 package com.kushnir.transportationproblemsolver
-
+import com.kushnir.transportationproblemsolver.SolutionStep
 import android.content.Intent
 import android.os.Bundle
 import android.widget.TableLayout
@@ -10,7 +10,10 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.util.Log
+import android.widget.HorizontalScrollView
 import android.widget.Toast
+import android.graphics.Color
+import kotlin.math.abs
 import com.kushnir.transportationproblemsolver.solvers.DoublePreferenceSolver
 import com.kushnir.transportationproblemsolver.solvers.FogelSolver
 
@@ -18,6 +21,7 @@ class SolutionActivity : AppCompatActivity() {
     private lateinit var balanceConditionText: TextView
     private lateinit var solutionStepsContainer: LinearLayout
     private lateinit var resultTextView: TextView
+    private var isVogelMethod = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +46,9 @@ class SolutionActivity : AppCompatActivity() {
 
             // Получаем метод решения, если не передан - берем первый метод из массива
             val methodType = intent.getStringExtra("methodType") ?: resources.getStringArray(R.array.methods)[0]
+            isVogelMethod = methodType == resources.getStringArray(R.array.methods)[1]
+
+            val objectiveType = intent.getStringExtra("objectiveType") ?: resources.getStringArray(R.array.objectives)[0]
 
             // Используем метод solveWithSteps из класса TransportationProblem
             val solutionSteps = problem.solveWithSteps(this, methodType)
@@ -61,9 +68,9 @@ class SolutionActivity : AppCompatActivity() {
 
         val balanceText = getString(R.string.balance_check, totalSupply, totalDemand)
 
-        if (kotlin.math.abs(totalSupply - totalDemand) > 0.0001) {
+        if (abs(totalSupply - totalDemand) > 0.0001) {
             // Задача несбалансированная
-            val diff = kotlin.math.abs(totalSupply - totalDemand)
+            val diff = abs(totalSupply - totalDemand)
             val additionalText = if (totalSupply < totalDemand) {
                 "Добавляем фиктивного поставщика П${problem.costs.size + 1} с запасом $diff"
             } else {
@@ -82,14 +89,8 @@ class SolutionActivity : AppCompatActivity() {
         val balancedProblem = problem.makeBalanced()
 
         Log.d("SolutionActivity", "Steps count: ${solutionSteps.size}")
-        Log.d(
-            "SolutionActivity",
-            "Original dimensions: ${problem.costs.size}x${problem.costs[0].size}"
-        )
-        Log.d(
-            "SolutionActivity",
-            "Balanced dimensions: ${balancedProblem.costs.size}x${balancedProblem.costs[0].size}"
-        )
+        Log.d("SolutionActivity", "Original dimensions: ${problem.costs.size}x${problem.costs[0].size}")
+        Log.d("SolutionActivity", "Balanced dimensions: ${balancedProblem.costs.size}x${balancedProblem.costs[0].size}")
 
         solutionSteps.forEachIndexed { index, step ->
             try {
@@ -97,13 +98,13 @@ class SolutionActivity : AppCompatActivity() {
                 if (step.selectedRow < 0 || step.selectedRow >= balancedProblem.costs.size ||
                     step.selectedCol < 0 || step.selectedCol >= balancedProblem.costs[0].size
                 ) {
-                    Log.e(
-                        "SolutionActivity",
-                        "Invalid indices: row=${step.selectedRow}, col=${step.selectedCol}"
-                    )
-                    return@forEachIndexed
+                    if (step.isFictive) {
+                        // Это нормально для шага с добавлением фиктивного элемента
+                    } else {
+                        Log.e("SolutionActivity", "Invalid indices: row=${step.selectedRow}, col=${step.selectedCol}")
+                        return@forEachIndexed
+                    }
                 }
-
 
                 // Создаем контейнер для шага
                 val stepContainer = LinearLayout(this).apply {
@@ -116,38 +117,42 @@ class SolutionActivity : AppCompatActivity() {
                     }
                 }
 
-                // Добавляем описание шага с безопасным обращением к costs
-                val costValue = balancedProblem.costs[step.selectedRow][step.selectedCol]
+                // Добавляем описание шага
                 val stepDescription = TextView(this).apply {
-                    text = getString(
-                        R.string.step_description,
-                        index + 1,
-                        step.selectedRow + 1,
-                        step.selectedCol + 1,
-                        costValue
-                    )
+                    text = step.description
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                     setPadding(0, 8, 0, 8)
                 }
                 stepContainer.addView(stepDescription)
 
-                val matrixTable = createMatrixTable(step.currentSolution, balancedProblem)
-                stepContainer.addView(matrixTable)
-
-                // Добавляем описание распределения
-                val distributionDescription = TextView(this).apply {
-                    text = getString(
-                        R.string.distribution_description,
-                        step.selectedRow + 1,
-                        step.selectedCol + 1,
-                        step.remainingSupplies[step.selectedRow],
-                        step.remainingDemands[step.selectedCol],
-                        step.quantity
+                // Создаем горизонтальную прокрутку для таблицы
+                val horizontalScrollView = HorizontalScrollView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
                     )
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                    setPadding(0, 8, 0, 8)
+                    isHorizontalScrollBarEnabled = true
+                    scrollBarSize = 10
                 }
-                stepContainer.addView(distributionDescription)
+
+                // Создаем и добавляем матрицу в горизонтальную прокрутку
+                if (step.isVogel && step.rowPenalties != null && step.colPenalties != null && !step.isFictive) {
+                    // Для метода Фогеля создаем матрицу со штрафами
+                    val matrixTable = createMatrixTableWithPenalties(
+                        step.currentSolution,
+                        balancedProblem,
+                        step.rowPenalties,
+                        step.colPenalties
+                    )
+                    horizontalScrollView.addView(matrixTable)
+                } else {
+                    // Для других методов используем обычную матрицу
+                    val matrixTable = createMatrixTable(step.currentSolution, balancedProblem)
+                    horizontalScrollView.addView(matrixTable)
+                }
+
+                // Добавляем горизонтальную прокрутку в контейнер шага
+                stepContainer.addView(horizontalScrollView)
 
                 solutionStepsContainer.addView(stepContainer)
             } catch (e: Exception) {
@@ -157,8 +162,7 @@ class SolutionActivity : AppCompatActivity() {
 
         try {
             if (solutionSteps.isNotEmpty()) {
-                val totalCost =
-                    calculateTotalCost(solutionSteps.last().currentSolution, balancedProblem)
+                val totalCost = calculateTotalCost(solutionSteps.last().currentSolution, balancedProblem)
                 resultTextView.text = getString(R.string.total_cost, totalCost)
             }
         } catch (e: Exception) {
@@ -172,7 +176,7 @@ class SolutionActivity : AppCompatActivity() {
     ): TableLayout {
         return TableLayout(this).apply {
             layoutParams = TableLayout.LayoutParams(
-                TableLayout.LayoutParams.MATCH_PARENT,
+                TableLayout.LayoutParams.WRAP_CONTENT,
                 TableLayout.LayoutParams.WRAP_CONTENT
             )
             setBackgroundResource(android.R.color.background_light)
@@ -190,6 +194,7 @@ class SolutionActivity : AppCompatActivity() {
                 }
                 addView(TextView(context).apply {
                     text = getString(R.string.header_supplies)
+                    minWidth = 60
                     gravity = Gravity.CENTER
                     setPadding(8, 8, 8, 8)
                 })
@@ -202,6 +207,7 @@ class SolutionActivity : AppCompatActivity() {
                     addView(TextView(context).apply {
                         text = getString(R.string.header_supplier, i + 1)
                         gravity = Gravity.CENTER
+                        minWidth = 80
                         setPadding(8, 8, 8, 8)
                     })
 
@@ -214,7 +220,13 @@ class SolutionActivity : AppCompatActivity() {
                                 "-"
                             }
                             gravity = Gravity.CENTER
+                            minWidth = 80
                             setPadding(8, 8, 8, 8)
+
+                            // Добавить подсветку фиктивных путей
+                            if ((i >= problem.costs.size || j >= problem.costs[0].size) && solution[i][j] > 0) {
+                                setBackgroundColor(Color.parseColor("#FFECB3"))
+                            }
                         })
                     }
 
@@ -222,6 +234,7 @@ class SolutionActivity : AppCompatActivity() {
                     addView(TextView(context).apply {
                         text = String.format("%.1f", problem.supplies[i])
                         gravity = Gravity.CENTER
+                        minWidth = 80
                         setPadding(8, 8, 8, 8)
                     })
                 })
@@ -232,16 +245,180 @@ class SolutionActivity : AppCompatActivity() {
                 addView(TextView(context).apply {
                     text = getString(R.string.header_demands)
                     gravity = Gravity.CENTER
+                    minWidth = 80
                     setPadding(8, 8, 8, 8)
                 })
                 for (j in solution[0].indices) {
                     addView(TextView(context).apply {
                         text = String.format("%.1f", problem.demands[j])
                         gravity = Gravity.CENTER
+                        minWidth = 80
                         setPadding(8, 8, 8, 8)
                     })
                 }
-                addView(TextView(context).apply { text = "" })
+                addView(TextView(context).apply {
+                    text = ""
+                    minWidth = 80
+                })
+            })
+        }
+    }
+    private fun createMatrixTableWithPenalties(
+        solution: Array<DoubleArray>,
+        problem: TransportationProblem,
+        rowPenalties: DoubleArray,
+        colPenalties: DoubleArray
+    ): TableLayout {
+        return TableLayout(this).apply {
+            layoutParams = TableLayout.LayoutParams(
+                TableLayout.LayoutParams.WRAP_CONTENT,  // Изменено с MATCH_PARENT на WRAP_CONTENT
+                TableLayout.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(android.R.color.background_light)
+            setPadding(16, 16, 16, 16)
+
+            // Добавляем заголовки столбцов
+            addView(TableRow(context).apply {
+                addView(TextView(context).apply {
+                    text = ""
+                    minWidth = 60
+                    setPadding(8, 8, 8, 8)
+                })
+                for (j in solution[0].indices) {
+                    addView(TextView(context).apply {
+                        text = getString(R.string.header_store, j + 1)
+                        gravity = Gravity.CENTER
+                        minWidth = 80
+                        setPadding(8, 8, 8, 8)
+                    })
+                }
+                addView(TextView(context).apply {
+                    text = getString(R.string.header_supplies)
+                    gravity = Gravity.CENTER
+                    minWidth = 80
+                    setPadding(8, 8, 8, 8)
+                })
+                // Добавляем заголовок для штрафов строк
+                addView(TextView(context).apply {
+                    text = getString(R.string.header_row_penalties)
+                    gravity = Gravity.CENTER
+                    minWidth = 100
+                    setPadding(8, 8, 8, 8)
+                    setBackgroundColor(Color.parseColor("#E6E6FA")) // Светло-лавандовый цвет для выделения
+                })
+            })
+
+            // Добавляем строки с данными
+            for (i in solution.indices) {
+                addView(TableRow(context).apply {
+                    // Заголовок строки
+                    addView(TextView(context).apply {
+                        text = getString(R.string.header_supplier, i + 1)
+                        gravity = Gravity.CENTER
+                        minWidth = 60
+                        setPadding(8, 8, 8, 8)
+                    })
+
+                    // Значения решения
+                    for (j in solution[i].indices) {
+                        addView(TextView(context).apply {
+                            text = if (solution[i][j] > 0) {
+                                String.format("%.1f", solution[i][j])
+                            } else {
+                                "-"
+                            }
+                            gravity = Gravity.CENTER
+                            minWidth = 80
+                            setPadding(8, 8, 8, 8)
+
+                            // Если ячейка фиктивная, выделим её другим цветом
+                            if ((i >= problem.costs.size || j >= problem.costs[0].size) && solution[i][j] > 0) {
+                                setBackgroundColor(Color.parseColor("#FFECB3")) // Светло-жёлтый для фиктивных путей
+                            }
+                        })
+                    }
+
+                    // Значения запасов
+                    addView(TextView(context).apply {
+                        text = String.format("%.1f", problem.supplies[i])
+                        gravity = Gravity.CENTER
+                        minWidth = 80
+                        setPadding(8, 8, 8, 8)
+                    })
+
+                    // Штрафы для строк
+                    addView(TextView(context).apply {
+                        val penalty = rowPenalties[i]
+                        text = if (penalty.isFinite() && penalty >= 0) {
+                            String.format("%.1f", penalty)
+                        } else {
+                            "-"
+                        }
+                        gravity = Gravity.CENTER
+                        minWidth = 100
+                        setPadding(8, 8, 8, 8)
+                        setBackgroundColor(Color.parseColor("#E6E6FA")) // Светло-лавандовый цвет для выделения
+                    })
+                })
+            }
+
+            // Добавляем строку потребностей
+            addView(TableRow(context).apply {
+                addView(TextView(context).apply {
+                    text = getString(R.string.header_demands)
+                    gravity = Gravity.CENTER
+                    minWidth = 60
+                    setPadding(8, 8, 8, 8)
+                })
+                for (j in solution[0].indices) {
+                    addView(TextView(context).apply {
+                        text = String.format("%.1f", problem.demands[j])
+                        gravity = Gravity.CENTER
+                        minWidth = 80
+                        setPadding(8, 8, 8, 8)
+                    })
+                }
+                addView(TextView(context).apply {
+                    text = ""
+                    minWidth = 80
+                })
+                addView(TextView(context).apply {
+                    text = ""
+                    minWidth = 100
+                })
+            })
+
+            // Добавляем строку штрафов столбцов
+            addView(TableRow(context).apply {
+                addView(TextView(context).apply {
+                    text = getString(R.string.header_col_penalties)
+                    gravity = Gravity.CENTER
+                    minWidth = 60
+                    setPadding(8, 8, 8, 8)
+                    setBackgroundColor(Color.parseColor("#E6E6FA")) // Светло-лавандовый цвет для выделения
+                })
+                for (j in solution[0].indices) {
+                    addView(TextView(context).apply {
+                        val penalty = colPenalties[j]
+                        text = if (penalty.isFinite() && penalty >= 0) {
+                            String.format("%.1f", penalty)
+                        } else {
+                            "-"
+                        }
+                        gravity = Gravity.CENTER
+                        minWidth = 80
+                        setPadding(8, 8, 8, 8)
+                        setBackgroundColor(Color.parseColor("#E6E6FA")) // Светло-лавандовый цвет для выделения
+                    })
+                }
+                addView(TextView(context).apply {
+                    text = ""
+                    minWidth = 80
+                })
+                addView(TextView(context).apply {
+                    text = ""
+                    minWidth = 100
+                })
             })
         }
     }
@@ -253,7 +430,9 @@ class SolutionActivity : AppCompatActivity() {
         var totalCost = 0.0
         for (i in solution.indices) {
             for (j in solution[i].indices) {
-                totalCost += solution[i][j] * problem.costs[i][j]
+                if (i < problem.costs.size && j < problem.costs[0].size) {
+                    totalCost += solution[i][j] * problem.costs[i][j]
+                }
             }
         }
         return totalCost
