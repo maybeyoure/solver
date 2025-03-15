@@ -51,6 +51,7 @@ class ProblemInputActivity : AppCompatActivity() {
                             demandsInputs = state.demandsInputs
                             createTable(numRows, numCols)
                         }
+
                         ProblemInputViewModel.UiState.Initial -> {
                             // Начальное состояние, ничего не делаем
                         }
@@ -73,7 +74,10 @@ class ProblemInputActivity : AppCompatActivity() {
                     try {
                         val problem = createProblem()
                         withContext(Dispatchers.Main) {
-                            val intent = Intent(this@ProblemInputActivity, SolutionActivity::class.java).apply {
+                            val intent = Intent(
+                                this@ProblemInputActivity,
+                                SolutionActivity::class.java
+                            ).apply {
                                 putExtra("problem", problem)
                                 putExtra("methodType", spinnerMethod.selectedItem.toString())
                                 putExtra("objectiveType", spinnerObjective.selectedItem.toString())
@@ -82,19 +86,16 @@ class ProblemInputActivity : AppCompatActivity() {
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(
-                                this@ProblemInputActivity,
-                                getString(R.string.error_data, e.message),
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            Toast.makeText(this@ProblemInputActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
             } else {
-                Toast.makeText(this, getString(R.string.error_invalid_input), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Некорректные данные!", Toast.LENGTH_SHORT).show()
             }
         }
     }
+
     // Выносим настройку спиннеров в отдельную функцию
     private fun setupSpinners() {
         val methodAdapter = ArrayAdapter.createFromResource(
@@ -118,6 +119,7 @@ class ProblemInputActivity : AppCompatActivity() {
         spinnerMethod.prompt = getString(R.string.select_method_prompt)
         spinnerObjective.prompt = getString(R.string.select_objective_prompt)
     }
+
     private fun createProblem(): TransportationProblem {
         // Создаем массив затрат из матрицы EditText
         val costs = Array(costsMatrix.size) { i ->
