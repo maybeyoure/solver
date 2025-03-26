@@ -31,6 +31,7 @@ class SolutionActivity : AppCompatActivity() {
             balanceConditionText = findViewById(R.id.balance_condition_text)
             solutionStepsContainer = findViewById(R.id.solution_steps_container)
             resultTextView = findViewById(R.id.result_text_view)
+            val methodTitleText = findViewById<TextView>(R.id.method_title_text)
 
             val problem = intent.getSerializableExtra("problem") as? TransportationProblem
             if (problem == null) {
@@ -41,19 +42,15 @@ class SolutionActivity : AppCompatActivity() {
 
             Log.d("SolutionActivity", "Problem received: ${problem.costs.size}x${problem.costs[0].size}")
 
-            // Проверка баланса
-            displayBalanceCheck(problem)
-
             // Получаем метод решения, если не передан - берем первый метод из массива
             val methodType = intent.getStringExtra("methodType") ?: resources.getStringArray(R.array.methods)[0]
             isVogelMethod = methodType == resources.getStringArray(R.array.methods)[1]
+            methodTitleText.text = getString(R.string.method_title, methodType)
 
             val objectiveType = intent.getStringExtra("objectiveType") ?: resources.getStringArray(R.array.objectives)[0]
-
-            // Используем метод solveWithSteps из класса TransportationProblem
+            displayBalanceCheck(problem)
             val solutionSteps = problem.solveWithSteps(this, methodType)
 
-            // Отображаем шаги решения
             displaySolutionSteps(solutionSteps, problem)
         } catch (e: Exception) {
             Log.e("SolutionActivity", "Error in onCreate", e)
@@ -69,14 +66,7 @@ class SolutionActivity : AppCompatActivity() {
         val balanceText = getString(R.string.balance_check, totalSupply, totalDemand)
 
         if (abs(totalSupply - totalDemand) > 0.0001) {
-            // Задача несбалансированная
-            val diff = abs(totalSupply - totalDemand)
-            val additionalText = if (totalSupply < totalDemand) {
-                "Добавляем фиктивного поставщика П${problem.costs.size + 1} с запасом $diff"
-            } else {
-                "Добавляем фиктивный магазин M${problem.costs[0].size + 1} с потребностью $diff"
-            }
-            balanceConditionText.text = "$balanceText\nЗадача является открытой.\n$additionalText"
+            balanceConditionText.text = "$balanceText\nЗадача является открытой."
         } else {
             balanceConditionText.text = "$balanceText\nЗадача является закрытой."
         }
@@ -150,8 +140,6 @@ class SolutionActivity : AppCompatActivity() {
                     val matrixTable = createMatrixTable(step.currentSolution, balancedProblem)
                     horizontalScrollView.addView(matrixTable)
                 }
-
-                // Добавляем горизонтальную прокрутку в контейнер шага
                 stepContainer.addView(horizontalScrollView)
 
                 solutionStepsContainer.addView(stepContainer)
@@ -215,7 +203,7 @@ class SolutionActivity : AppCompatActivity() {
                     for (j in solution[i].indices) {
                         addView(TextView(context).apply {
                             text = if (solution[i][j] > 0) {
-                                String.format("%.1f", solution[i][j])
+                                String.format("%.0f", solution[i][j])
                             } else {
                                 "-"
                             }
@@ -232,7 +220,7 @@ class SolutionActivity : AppCompatActivity() {
 
                     // Значения запасов
                     addView(TextView(context).apply {
-                        text = String.format("%.1f", problem.supplies[i])
+                        text = String.format("%.0f", problem.supplies[i])
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -250,7 +238,7 @@ class SolutionActivity : AppCompatActivity() {
                 })
                 for (j in solution[0].indices) {
                     addView(TextView(context).apply {
-                        text = String.format("%.1f", problem.demands[j])
+                        text = String.format("%.0f", problem.demands[j])
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -300,7 +288,7 @@ class SolutionActivity : AppCompatActivity() {
                 })
                 // Добавляем заголовок для штрафов строк
                 addView(TextView(context).apply {
-                    text = getString(R.string.header_row_penalties)
+                    text = getString(R.string.header_penalties)
                     gravity = Gravity.CENTER
                     minWidth = 100
                     setPadding(8, 8, 8, 8)
@@ -323,7 +311,7 @@ class SolutionActivity : AppCompatActivity() {
                     for (j in solution[i].indices) {
                         addView(TextView(context).apply {
                             text = if (solution[i][j] > 0) {
-                                String.format("%.1f", solution[i][j])
+                                String.format("%.0f", solution[i][j])
                             } else {
                                 "-"
                             }
@@ -340,7 +328,7 @@ class SolutionActivity : AppCompatActivity() {
 
                     // Значения запасов
                     addView(TextView(context).apply {
-                        text = String.format("%.1f", problem.supplies[i])
+                        text = String.format("%.0f", problem.supplies[i])
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -350,7 +338,7 @@ class SolutionActivity : AppCompatActivity() {
                     addView(TextView(context).apply {
                         val penalty = rowPenalties[i]
                         text = if (penalty.isFinite() && penalty >= 0) {
-                            String.format("%.1f", penalty)
+                            String.format("%.0f", penalty)
                         } else {
                             "-"
                         }
@@ -372,7 +360,7 @@ class SolutionActivity : AppCompatActivity() {
                 })
                 for (j in solution[0].indices) {
                     addView(TextView(context).apply {
-                        text = String.format("%.1f", problem.demands[j])
+                        text = String.format("%.0f", problem.demands[j])
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -391,7 +379,7 @@ class SolutionActivity : AppCompatActivity() {
             // Добавляем строку штрафов столбцов
             addView(TableRow(context).apply {
                 addView(TextView(context).apply {
-                    text = getString(R.string.header_col_penalties)
+                    text = getString(R.string.header_penalties)
                     gravity = Gravity.CENTER
                     minWidth = 60
                     setPadding(8, 8, 8, 8)
@@ -401,7 +389,7 @@ class SolutionActivity : AppCompatActivity() {
                     addView(TextView(context).apply {
                         val penalty = colPenalties[j]
                         text = if (penalty.isFinite() && penalty >= 0) {
-                            String.format("%.1f", penalty)
+                            String.format("%.0f", penalty)
                         } else {
                             "-"
                         }

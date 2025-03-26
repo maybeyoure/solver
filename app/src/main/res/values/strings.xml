@@ -1,13 +1,8 @@
 <resources>
     <string name="app_name">Транспортная задача</string>
-
-    <!-- Заголовки -->
     <string name="input_header">Заполните матрицу тарифов, выберите метод нахождения начального плана</string>
-
-    <!-- Кнопки -->
     <string name="btn_next">Далее</string>
 
-    <!-- Заголовки таблицы -->
     <string name="header_supplier">П%1$d</string>
     <string name="header_store">M%1$d</string>
     <string name="header_supplies">Запасы</string>
@@ -19,11 +14,11 @@
     <string name="select_method_prompt">Выберите метод</string>
     <string name="select_objective_prompt">Целевая функция</string>
     <string name="default_method">Метод двойного предпочтения</string>
-    <string name="header_row_penalties">Штрафы строк</string>
-    <string name="header_col_penalties">Штрафы столбцов</string>
-    <string name="vogel_step_description">Шаг %1$d: Выбираем клетку (%2$d;%3$d) на основе максимального штрафа %4$s (штраф = %5$.1f). Значение тарифа c%2$d%3$d=%6$.1f</string>
-    <string name="vogel_penalty_description">Используем штраф %1$s %2$d равный %3$.1f (разница между двумя наименьшими тарифами)</string>
+    <string name="header_penalties">Штрафы</string>
+    <string name="vogel_step_description">Шаг %1$d: Выбираем клетку (%2$d;%3$d) на основе максимального штрафа %4$s (штраф = %5$.0f). Значение тарифа c%2$d%3$d=%6$.0f</string>
+    <string name="vogel_penalty_description">Используем штраф %1$s %2$d равный %3$.0f (разница между двумя наименьшими тарифами)</string>
     <string name="vogel_cell_selection">В выбранной строке/столбце находим ячейку с минимальным тарифом</string>
+    <string name="method_title">Нахождение опорного плана. %1$s</string>
 
     <!-- Сообщения об ошибках -->
     <string name="error_select_method_objective">Выберите метод решения и целевую функцию</string>
@@ -35,16 +30,16 @@
     <string name="solution_method">Метод решения: %1$s</string>
     <string name="optimization_type">Тип оптимизации: %1$s</string>
     <string name="matrix_size">Размерность: %1$dx%2$d</string>
-    <string name="total_supply">Сумма запасов: %1$.2f</string>
-    <string name="total_demand">Сумма потребностей: %1$.2f</string>
+    <string name="total_supply">Сумма запасов: %1$.0f</string>
+    <string name="total_demand">Сумма потребностей: %1$.0f</string>
     <string name="fictive_supplier">Добавлен фиктивный поставщик П%1$d</string>
     <string name="fictive_store">Добавлен фиктивный магазин М%1$d</string>
-    <string name="total_cost">Общая стоимость перевозок: %1$.2f</string>
+    <string name="total_cost">Общая стоимость перевозок: %1$.0f</string>
     <string name="balance_check">Проверим необходимое и достаточное условие разрешимости задачи.\n∑a = %1$.0f\n∑b = %2$.0f</string>
     <string name="balance_result">Условие баланса соблюдается. Запасы равны потребностям. Следовательно, модель транспортной задачи является %1$s.</string>
-    <string name="step_description">Шаг %1$d: Искомый элемент находится в клетке (%2$d;%3$d) и равен c%2$d%3$d=%4$.1f</string>
-    <string name="distribution_description">x%1$d%2$d = min(%3$.1f, %4$.1f) = %5$.1f</string>
-    <string name="fictive_supplier_added">Добавляем фиктивного поставщика П%1$d с запасом %2$.1f</string>
-    <string name="fictive_store_added">Добавляем фиктивный магазин М%1$d с потребностью %2$.1f</string>
+    <string name="step_description">Шаг %1$d: Искомый элемент находится в клетке (%2$d;%3$d) и равен c%2$d%3$d=%4$.0f</string>
+    <string name="distribution_description">x%1$d%2$d = min(%3$.0f, %4$.0f) = %5$.0f</string>
+    <string name="fictive_supplier_added">Добавляем фиктивного поставщика П%1$d с запасом %2$.0f</string>
+    <string name="fictive_store_added">Добавляем фиктивный магазин М%1$d с потребностью %2$.0f</string>
 
 </resources>

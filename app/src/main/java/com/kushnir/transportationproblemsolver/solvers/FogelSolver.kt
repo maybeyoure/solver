@@ -160,8 +160,7 @@ class FogelSolver(private val problem: TransportationProblem) : TransportationSo
                 quantity,
                 isRow,
                 rowPenalties,
-                colPenalties,
-                "Выбираем реальную ячейку"
+                colPenalties
             ))
         }
 
@@ -226,8 +225,7 @@ class FogelSolver(private val problem: TransportationProblem) : TransportationSo
                     quantity,
                     isRow,
                     rowPenalties,
-                    colPenalties,
-                    "Выбираем фиктивную ячейку"
+                    colPenalties
                 ))
             }
         }
