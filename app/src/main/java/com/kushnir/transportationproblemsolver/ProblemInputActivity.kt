@@ -4,8 +4,16 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ProblemInputActivity : AppCompatActivity() {
+    private val viewModel: ProblemInputViewModel by viewModels()
     private lateinit var tableLayout: TableLayout
     private lateinit var btnSolve: Button
     private lateinit var spinnerMethod: Spinner
@@ -18,33 +26,43 @@ class ProblemInputActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_problem_input)
 
+        // Инициализация views
         tableLayout = findViewById(R.id.table_costs)
         btnSolve = findViewById(R.id.btn_solve)
         spinnerMethod = findViewById(R.id.spinner_method)
         spinnerObjective = findViewById(R.id.spinner_objective)
 
+        // Настройка спиннеров - это быстрая операция, можно оставить в главном потоке
+        setupSpinners()
+
+        // Получение размеров матрицы
         val numRows = intent.getIntExtra("numRows", 0)
         val numCols = intent.getIntExtra("numCols", 0)
+        viewModel.initializeMatrices(this, numRows, numCols)
 
-        costsMatrix = Array(numRows) { Array(numCols) { EditText(this) } }
-        suppliesInputs = Array(numRows) { EditText(this) }
-        demandsInputs = Array(numCols) { EditText(this) }
-        val methods = listOf("Метод двойного предпочтения", "Метод Фогеля")
-        val objectives = listOf("Минимальные затраты", "Максимальная прибыль")
+        // Запускаем тяжелые операции в фоновом потоке
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    when (state) {
+                        is ProblemInputViewModel.UiState.MatricesReady -> {
+                            costsMatrix = state.costsMatrix
+                            suppliesInputs = state.suppliesInputs
+                            demandsInputs = state.demandsInputs
+                            createTable(numRows, numCols)
+                        }
 
-        val methodAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, methods)
-        val objectiveAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, objectives)
+                        ProblemInputViewModel.UiState.Initial -> {
+                            // Начальное состояние, ничего не делаем
+                        }
+                    }
+                }
+            }
+        }// Настройка кнопок
+        setupButtons()
+    }
 
-        methodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        objectiveAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-
-        spinnerMethod.adapter = methodAdapter
-        spinnerObjective.adapter = objectiveAdapter
-
-        spinnerMethod.prompt = getString(R.string.select_method_prompt)
-        spinnerObjective.prompt = getString(R.string.select_objective_prompt)
-
-        createTable(numRows, numCols)
+    private fun setupButtons() {
         val btnBack: ImageButton = findViewById(R.id.btn_back)
         btnBack.setOnClickListener {
             onBackPressed()
@@ -52,21 +70,75 @@ class ProblemInputActivity : AppCompatActivity() {
 
         btnSolve.setOnClickListener {
             if (validateInput()) {
-                try {
-                    val problem = createProblem()
-                    val intent = Intent(this, SolutionActivity::class.java).apply {
-                        putExtra("problem", problem)
-                        putExtra("methodType", spinnerMethod.selectedItem.toString())
-                        putExtra("objectiveType", spinnerObjective.selectedItem.toString())
+                lifecycleScope.launch(Dispatchers.Default) {
+                    try {
+                        val problem = createProblem()
+                        withContext(Dispatchers.Main) {
+                            val intent = Intent(
+                                this@ProblemInputActivity,
+                                SolutionActivity::class.java
+                            ).apply {
+                                putExtra("problem", problem)
+                                putExtra("methodType", spinnerMethod.selectedItem.toString())
+                                putExtra("objectiveType", spinnerObjective.selectedItem.toString())
+                            }
+                            startActivity(intent)
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@ProblemInputActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
                     }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(this, getString(R.string.error_data, e.message), Toast.LENGTH_SHORT).show()
                 }
             } else {
-                Toast.makeText(this, getString(R.string.error_invalid_input), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Некорректные данные!", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    // Выносим настройку спиннеров в отдельную функцию
+    private fun setupSpinners() {
+        val methodAdapter = ArrayAdapter.createFromResource(
+            this,
+            R.array.methods,
+            android.R.layout.simple_spinner_item
+        )
+        val objectiveAdapter = ArrayAdapter.createFromResource(
+            this,
+            R.array.objectives,
+            android.R.layout.simple_spinner_item
+        )
+
+        methodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        objectiveAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+
+        spinnerMethod.adapter = methodAdapter
+        spinnerObjective.adapter = objectiveAdapter
+        spinnerMethod.setSelection(0)
+        spinnerObjective.setSelection(0)
+        spinnerMethod.prompt = getString(R.string.select_method_prompt)
+        spinnerObjective.prompt = getString(R.string.select_objective_prompt)
+    }
+
+    private fun createProblem(): TransportationProblem {
+        // Создаем массив затрат из матрицы EditText
+        val costs = Array(costsMatrix.size) { i ->
+            DoubleArray(costsMatrix[i].size) { j ->
+                costsMatrix[i][j].text.toString().toDouble()
+            }
+        }
+
+        // Создаем массив запасов
+        val supplies = DoubleArray(suppliesInputs.size) { i ->
+            suppliesInputs[i].text.toString().toDouble()
+        }
+
+        // Создаем массив потребностей
+        val demands = DoubleArray(demandsInputs.size) { i ->
+            demandsInputs[i].text.toString().toDouble()
+        }
+
+        return TransportationProblem(costs, supplies, demands)
     }
 
     private fun createTable(numRows: Int, numCols: Int) {
@@ -187,23 +259,5 @@ class ProblemInputActivity : AppCompatActivity() {
         }
 
         return true
-    }
-
-    private fun createProblem(): TransportationProblem {
-        val costs = Array(costsMatrix.size) { i ->
-            DoubleArray(costsMatrix[i].size) { j ->
-                costsMatrix[i][j].text.toString().toDouble()
-            }
-        }
-
-        val supplies = DoubleArray(suppliesInputs.size) { i ->
-            suppliesInputs[i].text.toString().toDouble()
-        }
-
-        val demands = DoubleArray(demandsInputs.size) { i ->
-            demandsInputs[i].text.toString().toDouble()
-        }
-
-        return TransportationProblem(costs, supplies, demands)
     }
 }
