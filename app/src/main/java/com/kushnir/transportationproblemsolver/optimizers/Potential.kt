@@ -1,0 +1,847 @@
+package com.kushnir.transportationproblemsolver.optimizers
+
+import android.content.Context
+import android.util.Log
+import com.kushnir.transportationproblemsolver.R
+import com.kushnir.transportationproblemsolver.TransportationProblem
+import kotlin.math.abs
+
+class Potential(private val isMinimization: Boolean) {
+    companion object {
+        private const val EPSILON = 1e-10
+        private const val MAX_ITERATIONS = 20
+    }
+
+    fun     optimizeWithSteps(
+        context: Context,
+        problem: TransportationProblem,
+        initialSolution: Array<DoubleArray>
+    ): List<OptimizationStep> {
+        try {
+            if (problem.costs.size <= 3 && problem.costs[0].size <= 3) {
+                Log.i("Potential", "Оптимизация малой задачи ${problem.costs.size}x${problem.costs[0].size}")
+
+                val totalCost = calculateTotalCost(problem, initialSolution)
+
+                // Для маленькой задачи просто возвращаем исходный план как оптимальный
+                return listOf(
+                    OptimizationStep(
+                        stepNumber = 1,
+                        description = context.getString(R.string.optimization_small_problem, totalCost),
+                        currentSolution = copyMatrix(initialSolution),
+                        isOptimal = true,
+                        totalCost = totalCost
+                    )
+                )
+            }
+
+            val steps = mutableListOf<OptimizationStep>()
+
+            // Проверяем, что размерности решения совпадают с размерностями задачи или больше
+            if (initialSolution.size < problem.costs.size || initialSolution[0].size < problem.costs[0].size) {
+                Log.e("Potential", "Несоответствие размеров: решение ${initialSolution.size}x${initialSolution[0].size}, " +
+                        "задача ${problem.costs.size}x${problem.costs[0].size}")
+
+                // Возвращаем шаг с ошибкой
+                return listOf(
+                    OptimizationStep(
+                        stepNumber = 1,
+                        description = "Ошибка: несоответствие размерностей решения и задачи",
+                        currentSolution = copyMatrix(initialSolution),
+                        isOptimal = true,
+                        totalCost = calculateTotalCost(problem, initialSolution)
+                    )
+                )
+            }
+
+            // Копируем решение
+            val solution = copyMatrix(initialSolution)
+
+            // Добавляем шаг с исходным планом
+            steps.add(createInitialStep(context, problem, solution))
+
+            // Проверяем и исправляем вырожденность плана
+            if (ensureNonDegeneratePlan(solution)) {
+                steps.add(createDegeneracyFixStep(context, problem, solution, steps.size + 1))
+            }
+
+            // Вычисляем потенциалы и проверяем, что они вычислены успешно
+            try {
+                val potentials = safeCalculatePotentials(problem, solution)
+                if (potentials == null) {
+                    // Если не удалось вычислить потенциалы, добавляем ошибку и возвращаем
+                    steps.add(
+                        OptimizationStep(
+                            stepNumber = steps.size + 1,
+                            description = context.getString(R.string.optimization_potentials_error),
+                            currentSolution = copyMatrix(solution),
+                            isOptimal = true, // Чтобы прекратить дальнейшие вычисления
+                            totalCost = calculateTotalCost(problem, solution)
+                        )
+                    )
+                    return steps
+                }
+
+                val (u, v) = potentials
+
+                // Вычисляем оценки для свободных клеток с защитой от ошибок
+                val evaluations = try {
+                    calculateEvaluations(problem, solution, u, v)
+                } catch (e: Exception) {
+                    Log.e("Potential", "Ошибка при вычислении оценок", e)
+                    steps.add(
+                        OptimizationStep(
+                            stepNumber = steps.size + 1,
+                            description = "Ошибка при вычислении оценок: ${e.message}",
+                            currentSolution = copyMatrix(solution),
+                            isOptimal = true,
+                            totalCost = calculateTotalCost(problem, solution)
+                        )
+                    )
+                    return steps
+                }
+
+                // Проверяем оптимальность
+                var (isOptimal, pivotCell) = checkOptimality(solution, evaluations)
+
+                // Добавляем шаг с потенциалами и оценками
+                steps.add(
+                    createPotentialsStep(
+                        context,
+                        problem,
+                        solution,
+                        u,
+                        v,
+                        evaluations,
+                        steps.size + 1
+                    )
+                )
+
+                // Если план уже оптимален, сразу завершаем
+                if (isOptimal) {
+                    steps.add(createFinalStep(context, problem, solution, steps.size + 1))
+                    return steps
+                }
+
+                // Итеративный процесс оптимизации
+                var iteration = 1
+
+                while (!isOptimal && iteration <= MAX_ITERATIONS) {
+                    // Строим цикл пересчета с проверкой на ошибки
+                    val cycle = safeBuildCycle(solution, pivotCell!!)
+
+                    // Если не удалось построить цикл, прерываем оптимизацию
+                    if (cycle.isEmpty()) {
+                        steps.add(
+                            OptimizationStep(
+                                stepNumber = steps.size + 1,
+                                description = context.getString(R.string.optimization_cycle_error),
+                                currentSolution = copyMatrix(solution),
+                                isOptimal = true, // Чтобы прекратить дальнейшие вычисления
+                                totalCost = calculateTotalCost(problem, solution)
+                            )
+                        )
+                        break
+                    }
+
+                    // Находим величину сдвига
+                    val theta = findTheta(solution, cycle)
+                    if (theta <= 0 || theta.isInfinite() || theta.isNaN()) {
+                        Log.e("Potential", "Некорректное значение θ: $theta")
+                        steps.add(
+                            OptimizationStep(
+                                stepNumber = steps.size + 1,
+                                description = "Ошибка: некорректное значение величины сдвига",
+                                currentSolution = copyMatrix(solution),
+                                isOptimal = true,
+                                totalCost = calculateTotalCost(problem, solution)
+                            )
+                        )
+                        break
+                    }
+
+                    // Добавляем шаг с циклом пересчета
+                    steps.add(
+                        createCycleStep(
+                            context,
+                            problem,
+                            solution,
+                            cycle,
+                            pivotCell,
+                            theta,
+                            steps.size + 1
+                        )
+                    )
+
+                    // Перераспределяем поставки
+                    redistributeSupplies(solution, cycle, theta)
+
+                    // Добавляем шаг с новым решением
+                    steps.add(createRedistributionStep(context, problem, solution, steps.size + 1))
+
+                    // Пересчитываем потенциалы и оценки с проверкой
+                    val newPotentials = safeCalculatePotentials(problem, solution)
+                    if (newPotentials == null) {
+                        // Если не удалось пересчитать потенциалы
+                        steps.add(
+                            OptimizationStep(
+                                stepNumber = steps.size + 1,
+                                description = context.getString(R.string.optimization_potentials_error),
+                                currentSolution = copyMatrix(solution),
+                                isOptimal = true,
+                                totalCost = calculateTotalCost(problem, solution)
+                            )
+                        )
+                        break
+                    }
+
+                    val (newU, newV) = newPotentials
+
+                    // Вычисляем новые оценки с защитой от ошибок
+                    val newEvaluations = try {
+                        calculateEvaluations(problem, solution, newU, newV)
+                    } catch (e: Exception) {
+                        Log.e("Potential", "Ошибка при пересчете оценок", e)
+                        steps.add(
+                            OptimizationStep(
+                                stepNumber = steps.size + 1,
+                                description = "Ошибка при пересчете оценок: ${e.message}",
+                                currentSolution = copyMatrix(solution),
+                                isOptimal = true,
+                                totalCost = calculateTotalCost(problem, solution)
+                            )
+                        )
+                        break
+                    }
+
+                    val optimalityResult = checkOptimality(solution, newEvaluations)
+                    isOptimal = optimalityResult.first
+                    pivotCell = optimalityResult.second
+
+                    // Добавляем шаг с новыми потенциалами
+                    steps.add(
+                        createPotentialsStep(
+                            context,
+                            problem,
+                            solution,
+                            newU,
+                            newV,
+                            newEvaluations,
+                            steps.size + 1
+                        )
+                    )
+
+                    // Если план стал оптимальным, добавляем финальный шаг
+                    if (isOptimal) {
+                        steps.add(createFinalStep(context, problem, solution, steps.size + 1))
+                        break
+                    }
+
+                    iteration++
+                }
+
+                // Если достигнуто максимальное число итераций
+                if (iteration > MAX_ITERATIONS && !isOptimal) {
+                    steps.add(
+                        OptimizationStep(
+                            stepNumber = steps.size + 1,
+                            description = context.getString(R.string.optimization_max_iterations),
+                            currentSolution = copyMatrix(solution),
+                            isOptimal = true,
+                            totalCost = calculateTotalCost(problem, solution)
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                // Обрабатываем любые непредвиденные ошибки
+                Log.e("Potential", "Непредвиденная ошибка при оптимизации", e)
+                steps.add(
+                    OptimizationStep(
+                        stepNumber = steps.size + 1,
+                        description = "Ошибка при оптимизации: ${e.message}",
+                        currentSolution = copyMatrix(solution),
+                        isOptimal = true,
+                        totalCost = calculateTotalCost(problem, solution)
+                    )
+                )
+            }
+
+            return steps
+        } catch (e: Exception) {
+            Log.e("Potential", "Неожиданная ошибка в optimizeWithSteps", e)
+
+            // В случае любой ошибки возвращаем хотя бы один шаг
+            return listOf(
+                OptimizationStep(
+                    stepNumber = 1,
+                    description = "Ошибка при оптимизации: ${e.message}",
+                    currentSolution = copyMatrix(initialSolution),
+                    isOptimal = true,
+                    totalCost = calculateTotalCost(problem, initialSolution)
+                )
+            )
+        }
+    }
+
+    private fun copyMatrix(matrix: Array<DoubleArray>): Array<DoubleArray> {
+        return Array(matrix.size) { i -> matrix[i].clone() }
+    }
+
+    private fun ensureNonDegeneratePlan(solution: Array<DoubleArray>): Boolean {
+        val rows = solution.size
+        val cols = solution[0].size
+        val requiredBasisCells = rows + cols - 1
+
+        // Находим текущие базисные клетки (с положительными поставками)
+        val basisCells = mutableSetOf<Pair<Int, Int>>()
+        for (i in 0 until rows) {
+            for (j in 0 until cols) {
+                if (solution[i][j] > EPSILON) {
+                    basisCells.add(Pair(i, j))
+                }
+            }
+        }
+
+        // Если количество базисных клеток достаточно, план не вырожден
+        if (basisCells.size >= requiredBasisCells) {
+            return false
+        }
+
+        // План вырожден, добавляем ε-поставки вместо нулевых
+        var added = 0
+        for (i in 0 until rows) {
+            for (j in 0 until cols) {
+                val cell = Pair(i, j)
+                if (cell !in basisCells) {
+                    solution[i][j] = EPSILON  // Используем EPSILON вместо 0.0
+                    basisCells.add(cell)
+                    added++
+
+                    if (basisCells.size >= requiredBasisCells) {
+                        return true
+                    }
+                }
+            }
+        }
+
+        return added > 0
+    }
+
+    // Безопасное вычисление потенциалов с возможностью вернуть null в случае ошибки
+    private fun safeCalculatePotentials(
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>
+    ): Pair<DoubleArray, DoubleArray>? {
+        try {
+            return calculatePotentials(problem, solution)
+        } catch (e: Exception) {
+            Log.e("Potential", "Ошибка при вычислении потенциалов", e)
+            return null
+        }
+    }
+
+    private fun calculatePotentials(
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>
+    ): Pair<DoubleArray, DoubleArray> {
+        val rows = solution.size
+        val cols = solution[0].size
+
+        val u = DoubleArray(rows) { Double.NaN }
+        val v = DoubleArray(cols) { Double.NaN }
+
+        // Устанавливаем u[0] = 0
+        u[0] = 0.0
+
+        // Собираем базисные клетки (с положительными поставками)
+        val basisCells = mutableListOf<Pair<Int, Int>>()
+        for (i in 0 until rows) {
+            for (j in 0 until cols) {
+                // Проверяем, что i и j находятся в пределах матрицы costs
+                if (i < problem.costs.size && j < problem.costs[0].size && solution[i][j] > EPSILON) {
+                    basisCells.add(Pair(i, j))
+                }
+            }
+        }
+
+        var updated = true
+        var iterations = 0
+        val maxIterations = (rows + cols) * 2 // Увеличиваем лимит итераций
+
+        while (updated && iterations < maxIterations) {
+            updated = false
+            iterations++
+
+            for ((i, j) in basisCells) {
+                // Добавляем проверку границ
+                if (i >= rows || j >= cols) {
+                    continue // Пропускаем ячейки, выходящие за границы
+                }
+
+                if (!u[i].isNaN() && v[j].isNaN()) {
+                    // Проверяем границы для доступа к costs
+                    if (i < problem.costs.size && j < problem.costs[0].size) {
+                        v[j] = problem.costs[i][j] - u[i]
+                        updated = true
+                    }
+                } else if (u[i].isNaN() && !v[j].isNaN()) {
+                    // Проверяем границы для доступа к costs
+                    if (i < problem.costs.size && j < problem.costs[0].size) {
+                        u[i] = problem.costs[i][j] - v[j]
+                        updated = true
+                    }
+                }
+            }
+        }
+
+        // Проверка, что все потенциалы определены
+        for (i in 0 until rows) {
+            if (u[i].isNaN()) {
+                Log.w("Potential", "Потенциал u[$i] не определен, устанавливаем 0")
+                u[i] = 0.0
+            }
+        }
+
+        for (j in 0 until cols) {
+            if (v[j].isNaN()) {
+                Log.w("Potential", "Потенциал v[$j] не определен, устанавливаем 0")
+                v[j] = 0.0
+            }
+        }
+
+        return Pair(u, v)
+    }
+
+    private fun calculateTotalCost(
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>
+    ): Double {
+        var totalCost = 0.0
+        for (i in solution.indices) {
+            for (j in solution[0].indices) {
+                if (i < problem.costs.size && j < problem.costs[0].size) {
+                    totalCost += solution[i][j] * problem.costs[i][j]
+                }
+            }
+        }
+        return totalCost
+    }
+
+    private fun calculateEvaluations(
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>,
+        u: DoubleArray,
+        v: DoubleArray
+    ): Array<DoubleArray> {
+        val rows = solution.size
+        val cols = solution[0].size
+        val evaluations = Array(rows) { DoubleArray(cols) }
+
+        for (i in 0 until rows) {
+            for (j in 0 until cols) {
+                // Проверяем, что i и j не выходят за границы массива costs
+                if (i < problem.costs.size && j < problem.costs[0].size) {
+                    evaluations[i][j] = problem.costs[i][j] - u[i] - v[j]
+                } else {
+                    // Для фиктивных клеток используем нулевую оценку
+                    evaluations[i][j] = 0.0
+                }
+            }
+        }
+
+        return evaluations
+    }
+
+    private fun checkOptimality(
+        solution: Array<DoubleArray>,
+        evaluations: Array<DoubleArray>
+    ): Pair<Boolean, Pair<Int, Int>?> {
+        val rows = evaluations.size
+        val cols = evaluations[0].size
+
+        // Для минимизации ищем отрицательные оценки, для максимизации - положительные
+        var bestEvaluation = 0.0
+        var bestCell: Pair<Int, Int>? = null
+
+        for (i in 0 until rows) {
+            for (j in 0 until cols) {
+                // Пропускаем базисные клетки
+                if (solution[i][j] > EPSILON) continue
+
+                val value = evaluations[i][j]
+
+                if ((isMinimization && value < bestEvaluation) ||
+                    (!isMinimization && value > bestEvaluation)
+                ) {
+                    bestEvaluation = value
+                    bestCell = Pair(i, j)
+                }
+            }
+        }
+
+        // Для минимизации план оптимален, если все оценки >= 0
+        // Для максимизации план оптимален, если все оценки <= 0
+        return Pair(
+            (isMinimization && bestEvaluation >= -EPSILON) ||
+                    (!isMinimization && bestEvaluation <= EPSILON),
+            bestCell
+        )
+    }
+
+    // Безопасное построение цикла с возможностью вернуть пустой список при ошибке
+    private fun safeBuildCycle(
+        solution: Array<DoubleArray>,
+        pivotCell: Pair<Int, Int>
+    ): List<Pair<Int, Int>> {
+        try {
+            val cycle = buildCycle(solution, pivotCell)
+            if (cycle.isEmpty()) {
+                Log.w("Potential", "Не удалось построить цикл, используем запасной вариант")
+                return createSimpleCycle(solution, pivotCell)
+            }
+            return cycle
+        } catch (e: Exception) {
+            Log.e("Potential", "Ошибка при построении цикла", e)
+            return createSimpleCycle(solution, pivotCell)
+        }
+    }
+
+    // Создает простой цикл в случае ошибки при построении полного цикла
+    private fun createSimpleCycle(
+        solution: Array<DoubleArray>,
+        pivotCell: Pair<Int, Int>
+    ): List<Pair<Int, Int>> {
+        // Получаем список базисных клеток
+        val basisCells = mutableListOf<Pair<Int, Int>>()
+        for (i in solution.indices) {
+            for (j in solution[0].indices) {
+                if (solution[i][j] > EPSILON && Pair(i, j) != pivotCell) {
+                    basisCells.add(Pair(i, j))
+                }
+            }
+        }
+
+        // Ищем клетку в той же строке
+        val rowCell = basisCells.firstOrNull { it.first == pivotCell.first }
+
+        // Ищем клетку в том же столбце
+        val colCell = basisCells.firstOrNull { it.second == pivotCell.second }
+
+        if (rowCell != null && colCell != null) {
+            // Ищем клетку на пересечении строки colCell и столбца rowCell
+            val cornerCell = basisCells.firstOrNull {
+                it.first == colCell.first && it.second == rowCell.second
+            }
+
+            if (cornerCell != null) {
+                // Возвращаем простой прямоугольный цикл
+                return listOf(pivotCell, rowCell, cornerCell, colCell)
+            }
+        }
+
+        // Если не получилось построить цикл, возвращаем пустой список
+        return emptyList()
+    }
+
+    private fun buildCycle(
+        solution: Array<DoubleArray>,
+        pivotCell: Pair<Int, Int>
+    ): List<Pair<Int, Int>> {
+        // Получаем список базисных клеток (с положительными поставками)
+        val basisCells = mutableListOf<Pair<Int, Int>>()
+        for (i in solution.indices) {
+            for (j in solution[0].indices) {
+                if (solution[i][j] > EPSILON) {
+                    basisCells.add(Pair(i, j))
+                }
+            }
+        }
+
+        // Добавляем ведущую клетку в список, если ее там нет
+        if (pivotCell !in basisCells) {
+            basisCells.add(pivotCell)
+        }
+
+        // Начинаем поиск цикла из ведущей клетки
+        val cycle = mutableListOf<Pair<Int, Int>>()
+        cycle.add(pivotCell)
+
+        // Используем алгоритм поиска в глубину
+        val visited = mutableSetOf<Pair<Int, Int>>()
+        if (findCycleDFS(pivotCell, pivotCell, basisCells, cycle, visited, false)) {
+            return cycle
+        }
+
+        // Если не удалось найти цикл, возвращаем хотя бы базовый прямоугольный цикл
+        return fallbackRectangularCycle(pivotCell, basisCells)
+    }
+
+    // Рекурсивный поиск цикла в глубину
+    private fun findCycleDFS(
+        startCell: Pair<Int, Int>,
+        currentCell: Pair<Int, Int>,
+        basisCells: List<Pair<Int, Int>>,
+        cycle: MutableList<Pair<Int, Int>>,
+        visited: MutableSet<Pair<Int, Int>>,
+        canClose: Boolean
+    ): Boolean {
+        // Если можем замкнуть цикл и вернулись в начальную клетку
+        if (canClose && currentCell == startCell && cycle.size >= 4) {
+            return true
+        }
+
+        // Отмечаем текущую клетку как посещенную
+        visited.add(currentCell)
+
+        // Перебираем все базисные клетки
+        for (cell in basisCells) {
+            // Пропускаем уже посещенные клетки
+            if (cell in visited && cell != startCell) continue
+
+            // Клетка должна быть в той же строке или столбце
+            if (cell.first == currentCell.first || cell.second == currentCell.second) {
+                // Проверяем, что нет других клеток цикла между текущей и следующей
+                if (isPathClear(currentCell, cell, cycle)) {
+                    // Добавляем клетку в цикл
+                    cycle.add(cell)
+
+                    // Продолжаем поиск из этой клетки
+                    val canCloseNext =
+                        canClose || (cell.first == startCell.first || cell.second == startCell.second)
+                    if (findCycleDFS(startCell, cell, basisCells, cycle, visited, canCloseNext)) {
+                        return true
+                    }
+
+                    // Если не удалось построить цикл, удаляем клетку
+                    cycle.removeAt(cycle.size - 1)
+                }
+            }
+        }
+
+        // Если не нашли цикл через эту клетку, снимаем отметку
+        visited.remove(currentCell)
+        return false
+    }
+
+    // Проверяет, что путь между клетками свободен
+    private fun isPathClear(
+        from: Pair<Int, Int>,
+        to: Pair<Int, Int>,
+        cycle: List<Pair<Int, Int>>
+    ): Boolean {
+        // Если клетки в одной строке
+        if (from.first == to.first) {
+            val row = from.first
+            val minCol = minOf(from.second, to.second)
+            val maxCol = maxOf(from.second, to.second)
+
+            // Проверяем, что между ними нет других клеток цикла
+            for (col in minCol + 1 until maxCol) {
+                if (Pair(row, col) in cycle) return false
+            }
+            return true
+        }
+
+        // Если клетки в одном столбце
+        if (from.second == to.second) {
+            val col = from.second
+            val minRow = minOf(from.first, to.first)
+            val maxRow = maxOf(from.first, to.first)
+
+            // Проверяем, что между ними нет других клеток цикла
+            for (row in minRow + 1 until maxRow) {
+                if (Pair(row, col) in cycle) return false
+            }
+            return true
+        }
+
+        return false
+    }
+
+    // Запасной метод для создания простого прямоугольного цикла
+    private fun fallbackRectangularCycle(
+        pivotCell: Pair<Int, Int>,
+        basisCells: List<Pair<Int, Int>>
+    ): List<Pair<Int, Int>> {
+        // Ищем клетку в той же строке
+        val rowCell = basisCells.firstOrNull { it.first == pivotCell.first && it != pivotCell }
+
+        // Ищем клетку в том же столбце
+        val colCell = basisCells.firstOrNull { it.second == pivotCell.second && it != pivotCell }
+
+        if (rowCell != null && colCell != null) {
+            // Ищем клетку на пересечении строки colCell и столбца rowCell
+            val cornerCell =
+                basisCells.firstOrNull { it.first == colCell.first && it.second == rowCell.second }
+
+            if (cornerCell != null) {
+                // Возвращаем прямоугольный цикл
+                return listOf(pivotCell, rowCell, cornerCell, colCell)
+            }
+        }
+
+        // Если не удалось построить цикл, возвращаем пустой список
+        return emptyList()
+    }
+
+    private fun findTheta(solution: Array<DoubleArray>, cycle: List<Pair<Int, Int>>): Double {
+        // Проверка на случай, если цикл пустой или с одним элементом
+        if (cycle.size <= 1) {
+            return 0.0
+        }
+
+        var theta = Double.MAX_VALUE
+
+        // Находим минимальное значение в отрицательных вершинах цикла (в нечетных позициях)
+        for (i in 1 until cycle.size step 2) {
+            val (row, col) = cycle[i]
+            if (solution[row][col] < theta) {
+                theta = solution[row][col]
+            }
+        }
+
+        return theta
+    }
+
+    private fun redistributeSupplies(
+        solution: Array<DoubleArray>,
+        cycle: List<Pair<Int, Int>>,
+        theta: Double
+    ) {
+        if (cycle.isEmpty() || theta <= 0) {
+            return
+        }
+
+        // Перераспределяем поставки по циклу
+        for (i in cycle.indices) {
+            val (row, col) = cycle[i]
+            if (i % 2 == 0) {
+                // Положительные вершины цикла - добавляем theta
+                solution[row][col] += theta
+            } else {
+                // Отрицательные вершины цикла - вычитаем theta
+                solution[row][col] -= theta
+
+                // Если значение близко к нулю, устанавливаем 0
+                if (abs(solution[row][col]) < EPSILON) {
+                    solution[row][col] = 0.0
+                }
+            }
+        }
+    }
+
+    private fun createRedistributionStep(
+        context: Context,
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>,
+        stepNumber: Int
+    ): OptimizationStep {
+        val totalCost = calculateTotalCost(problem, solution)
+
+        return OptimizationStep(
+            stepNumber = stepNumber,
+            description = context.getString(
+                R.string.optimization_after_redistribution,
+                totalCost
+            ),
+            currentSolution = copyMatrix(solution),
+            totalCost = totalCost
+        )
+    }
+
+    private fun createInitialStep(
+        context: Context,
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>
+    ): OptimizationStep {
+        val totalCost = calculateTotalCost(problem, solution)
+
+        return OptimizationStep(
+            stepNumber = 1,
+            description = context.getString(R.string.optimization_initial_plan, totalCost),
+            currentSolution = copyMatrix(solution),
+            totalCost = totalCost
+        )
+    }
+
+    private fun createDegeneracyFixStep(
+        context: Context,
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>,
+        stepNumber: Int
+    ): OptimizationStep {
+        val totalCost = calculateTotalCost(problem, solution)
+
+        return OptimizationStep(
+            stepNumber = stepNumber,
+            description = context.getString(R.string.optimization_fix_degeneracy),
+            currentSolution = copyMatrix(solution),
+            totalCost = totalCost
+        )
+    }
+
+    private fun createPotentialsStep(
+        context: Context, problem: TransportationProblem, solution: Array<DoubleArray>,
+        u: DoubleArray, v: DoubleArray, evaluations: Array<DoubleArray>, stepNumber: Int
+    ): OptimizationStep {
+        val totalCost = calculateTotalCost(problem, solution)
+
+        return OptimizationStep(
+            stepNumber = stepNumber,
+            description = context.getString(
+                R.string.optimization_potentials_calculated,
+                u.joinToString(", ") { String.format("%.2f", it) },
+                v.joinToString(", ") { String.format("%.2f", it) }
+            ),
+            currentSolution = copyMatrix(solution),
+            potentialsU = u.clone(),
+            potentialsV = v.clone(),
+            evaluations = copyMatrix(evaluations),
+            totalCost = totalCost
+        )
+    }
+
+    private fun createCycleStep(
+        context: Context, problem: TransportationProblem, solution: Array<DoubleArray>,
+        cycle: List<Pair<Int, Int>>, pivotCell: Pair<Int, Int>, theta: Double, stepNumber: Int
+    ): OptimizationStep {
+        val totalCost = calculateTotalCost(problem, solution)
+
+        val cycleDescription = cycle.joinToString(" → ") { "(${it.first + 1}, ${it.second + 1})" }
+
+        return OptimizationStep(
+            stepNumber = stepNumber,
+            description = context.getString(
+                R.string.optimization_cycle_built,
+                pivotCell.first + 1, pivotCell.second + 1,
+                cycleDescription,
+                theta
+            ),
+            currentSolution = copyMatrix(solution),
+            cyclePoints = cycle,
+            pivotCell = pivotCell,
+            theta = theta,
+            totalCost = totalCost
+        )
+    }
+
+    private fun createFinalStep(
+        context: Context,
+        problem: TransportationProblem,
+        solution: Array<DoubleArray>,
+        stepNumber: Int
+    ): OptimizationStep {
+        val totalCost = calculateTotalCost(problem, solution)
+
+        return OptimizationStep(
+            stepNumber = stepNumber,
+            description = context.getString(
+                R.string.optimization_optimal_found,
+                totalCost
+            ),
+            currentSolution = copyMatrix(solution),
+            isOptimal = true,
+            totalCost = totalCost
+        )
+    }
+}
