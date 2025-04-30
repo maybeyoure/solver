@@ -13,9 +13,12 @@ import android.util.Log
 import android.widget.HorizontalScrollView
 import android.widget.Toast
 import android.graphics.Color
+import android.graphics.Typeface
 import kotlin.math.abs
 import com.kushnir.transportationproblemsolver.solvers.DoublePreferenceSolver
 import com.kushnir.transportationproblemsolver.solvers.FogelSolver
+import com.kushnir.transportationproblemsolver.optimizers.Potential
+import com.kushnir.transportationproblemsolver.optimizers.OptimizationStep
 
 class SolutionActivity : AppCompatActivity() {
     private lateinit var balanceConditionText: TextView
@@ -52,6 +55,16 @@ class SolutionActivity : AppCompatActivity() {
             val solutionSteps = problem.solveWithSteps(this, methodType)
 
             displaySolutionSteps(solutionSteps, problem)
+
+            // Добавляем оптимизацию плана
+            val optimizationSteps = problem.optimizeSolutionWithSteps(this, methodType, objectiveType)
+
+            // Логирование для отладки
+            Log.d("SolutionActivity", "Optimization steps count: ${optimizationSteps.size}")
+
+            // Отображаем шаги оптимизации
+            displayOptimizationSteps(optimizationSteps, problem)
+
         } catch (e: Exception) {
             Log.e("SolutionActivity", "Error in onCreate", e)
             Toast.makeText(this, "Произошла ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -220,7 +233,11 @@ class SolutionActivity : AppCompatActivity() {
 
                     // Значения запасов
                     addView(TextView(context).apply {
-                        text = String.format("%.0f", problem.supplies[i])
+                        text = if (i < problem.supplies.size) {
+                            String.format("%.0f", problem.supplies[i])
+                        } else {
+                            String.format("%.0f", 0.0)
+                        }
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -238,7 +255,11 @@ class SolutionActivity : AppCompatActivity() {
                 })
                 for (j in solution[0].indices) {
                     addView(TextView(context).apply {
-                        text = String.format("%.0f", problem.demands[j])
+                        text = if (j < problem.demands.size) {
+                            String.format("%.0f", problem.demands[j])
+                        } else {
+                            String.format("%.0f", 0.0)
+                        }
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -328,7 +349,12 @@ class SolutionActivity : AppCompatActivity() {
 
                     // Значения запасов
                     addView(TextView(context).apply {
-                        text = String.format("%.0f", problem.supplies[i])
+                        text = if (i < problem.supplies.size) {
+                            String.format("%.0f", problem.supplies[i])
+                        } else {
+                            // For dummy/balanced rows
+                            String.format("%.0f", 0.0)
+                        }
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -360,7 +386,11 @@ class SolutionActivity : AppCompatActivity() {
                 })
                 for (j in solution[0].indices) {
                     addView(TextView(context).apply {
-                        text = String.format("%.0f", problem.demands[j])
+                        text = if (j < problem.demands.size) {
+                            String.format("%.0f", problem.demands[j])
+                        } else {
+                            String.format("%.0f", 0.0)
+                        }
                         gravity = Gravity.CENTER
                         minWidth = 80
                         setPadding(8, 8, 8, 8)
@@ -406,6 +436,335 @@ class SolutionActivity : AppCompatActivity() {
                 addView(TextView(context).apply {
                     text = ""
                     minWidth = 100
+                })
+            })
+        }
+    }
+
+    private fun displayOptimizationSteps(optimizationSteps: List<OptimizationStep>, problem: TransportationProblem) {
+        // Добавляем заголовок секции оптимизации
+        val optimizationHeader = TextView(this).apply {
+            text = getString(R.string.optimization_header)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setPadding(0, 24, 0, 16)
+            setTypeface(null, Typeface.BOLD)
+        }
+        solutionStepsContainer.addView(optimizationHeader)
+
+        // Проверяем, есть ли шаги для отображения
+        if (optimizationSteps.isEmpty()) {
+            val noStepsText = TextView(this).apply {
+                text = getString(R.string.optimization_no_steps)
+                setPadding(0, 8, 0, 8)
+            }
+            solutionStepsContainer.addView(noStepsText)
+            return
+        }
+
+        // Отображаем каждый шаг оптимизации
+        optimizationSteps.forEach { step ->
+            try {
+                // Создаем контейнер для шага
+                val stepContainer = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        setMargins(0, 16, 0, 16)
+                    }
+                }
+
+                // Добавляем описание шага
+                val stepDescription = TextView(this).apply {
+                    text = step.description
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                    setPadding(0, 8, 0, 8)
+                }
+                stepContainer.addView(stepDescription)
+
+                // Создаем горизонтальную прокрутку для таблицы
+                val horizontalScrollView = HorizontalScrollView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    isHorizontalScrollBarEnabled = true
+                    scrollBarSize = 10
+                }
+
+                // Выбираем тип таблицы в зависимости от содержимого шага
+                val tableLayout = when {
+                    // Если есть оценки и потенциалы, показываем матрицу с ними
+                    step.evaluations != null && step.potentialsU != null && step.potentialsV != null -> {
+                        createMatrixTableWithEvaluations(
+                            step.currentSolution,
+                            problem,
+                            step.potentialsU,
+                            step.potentialsV,
+                            step.evaluations
+                        )
+                    }
+                    step.cyclePoints != null && step.cyclePoints.isNotEmpty() -> {
+                        createMatrixTableWithCycle(
+                            step.currentSolution,
+                            problem,
+                            step.cyclePoints
+                        )
+                    }
+
+                    else -> {
+                        createMatrixTable(step.currentSolution, problem)
+                    }
+                }
+
+                horizontalScrollView.addView(tableLayout)
+                stepContainer.addView(horizontalScrollView)
+                solutionStepsContainer.addView(stepContainer)
+            } catch (e: Exception) {
+                Log.e("SolutionActivity", "Error displaying optimization step: ${e.message}")
+                val errorText = TextView(this).apply {
+                    text = "Ошибка при отображении шага: ${e.message}"
+                    setTextColor(Color.RED)
+                }
+                solutionStepsContainer.addView(errorText)
+            }
+        }
+
+        // Добавляем итоговый результат
+        if (optimizationSteps.isNotEmpty()) {
+            val lastStep = optimizationSteps.last()
+            val resultText = TextView(this).apply {
+                text = getString(
+                    if (lastStep.isOptimal) R.string.optimization_result
+                    else R.string.optimization_incomplete_result,
+                    lastStep.totalCost
+                )
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                setPadding(0, 16, 0, 16)
+                setTypeface(null, Typeface.BOLD)
+            }
+            solutionStepsContainer.addView(resultText)
+        }
+    }
+
+    private fun createMatrixTableWithEvaluations(
+        solution: Array<DoubleArray>,
+        problem: TransportationProblem,
+        potentialsU: DoubleArray,
+        potentialsV: DoubleArray,
+        evaluations: Array<DoubleArray>
+    ): TableLayout {
+        return TableLayout(this).apply {
+            layoutParams = TableLayout.LayoutParams(
+                TableLayout.LayoutParams.WRAP_CONTENT,
+                TableLayout.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(android.R.color.background_light)
+            setPadding(16, 16, 16, 16)
+
+            // Добавляем заголовок с потенциалами V
+            addView(TableRow(context).apply {
+                // Первая ячейка - U/V
+                addView(TextView(context).apply {
+                    text = "U\\V"
+                    gravity = Gravity.CENTER
+                    setPadding(8, 8, 8, 8)
+                })
+
+                for (j in solution[0].indices) {
+                    addView(TextView(context).apply {
+                        text = String.format("%.0f",
+                            if (j < potentialsV.size) potentialsV[j] else 0.0)
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                        setBackgroundColor(Color.LTGRAY)
+                    })
+                }
+
+                // Последняя ячейка - пусто
+                addView(TextView(context).apply {
+                    text = ""
+                    setPadding(8, 8, 8, 8)
+                })
+            })
+
+            // Добавляем строки с данными и оценками
+            for (i in solution.indices) {
+                addView(TableRow(context).apply {
+                    addView(TextView(context).apply {
+                        text = String.format("%.0f",
+                            if (i < potentialsU.size) potentialsU[i] else 0.0)
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                        setBackgroundColor(Color.LTGRAY)
+                    })
+
+                    // Значения поставок и оценок
+                    for (j in solution[i].indices) {
+                        val cellLayout = LinearLayout(context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            gravity = Gravity.CENTER
+                            setPadding(8, 8, 8, 8)
+
+                            // Если клетка базисная, показываем только поставку
+                            if (solution[i][j] > 0) {
+                                addView(TextView(context).apply {
+                                    text = String.format("%.0f", solution[i][j])
+                                    gravity = Gravity.CENTER
+                                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                                })
+                            }
+                            // Если клетка свободная, показываем поставку и оценку
+                            else {
+                                addView(TextView(context).apply {
+                                    text = "-"
+                                    gravity = Gravity.CENTER
+                                })
+
+                                addView(TextView(context).apply {
+                                    text = String.format("%.0f",
+                                        if (i < evaluations.size && j < evaluations[i].size) evaluations[i][j] else 0.0)
+                                    gravity = Gravity.CENTER
+                                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                                    setTextColor(
+                                        if (i < evaluations.size && j < evaluations[i].size && evaluations[i][j] < 0) Color.RED
+                                        else if (i < evaluations.size && j < evaluations[i].size && evaluations[i][j] > 0) Color.BLUE
+                                        else Color.BLACK
+                                    )
+                                })
+                            }
+                        }
+                        addView(cellLayout)
+                    }
+
+                    // Значения запасов
+                    addView(TextView(context).apply {
+                        text = String.format("%.0f", problem.supplies[i])
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                    })
+                })
+            }
+
+            // Добавляем строку потребностей
+            addView(TableRow(context).apply {
+                addView(TextView(context).apply {
+                    text = ""
+                    setPadding(8, 8, 8, 8)
+                })
+
+                for (j in solution[0].indices) {
+                    addView(TextView(context).apply {
+                        text = String.format("%.0f", problem.demands[j])
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                    })
+                }
+
+                addView(TextView(context).apply {
+                    text = ""
+                    setPadding(8, 8, 8, 8)
+                })
+            })
+        }
+    }
+
+    private fun createMatrixTableWithCycle(
+        solution: Array<DoubleArray>,
+        problem: TransportationProblem,
+        cycle: List<Pair<Int, Int>>
+    ): TableLayout {
+        return TableLayout(this).apply {
+            layoutParams = TableLayout.LayoutParams(
+                TableLayout.LayoutParams.WRAP_CONTENT,
+                TableLayout.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(android.R.color.background_light)
+            setPadding(16, 16, 16, 16)
+
+            // Добавляем заголовки столбцов
+            addView(TableRow(context).apply {
+                addView(TextView(context).apply { text = "" })
+
+                for (j in solution[0].indices) {
+                    addView(TextView(context).apply {
+                        text = getString(R.string.header_store, j + 1)
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                    })
+                }
+
+                addView(TextView(context).apply {
+                    text = getString(R.string.header_supplies)
+                    gravity = Gravity.CENTER
+                    setPadding(8, 8, 8, 8)
+                })
+            })
+
+            // Добавляем строки с данными
+            for (i in solution.indices) {
+                addView(TableRow(context).apply {
+                    // Заголовок строки
+                    addView(TextView(context).apply {
+                        text = getString(R.string.header_supplier, i + 1)
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                    })
+
+                    // Значения поставок
+                    for (j in solution[i].indices) {
+                        val cell = Pair(i, j)
+                        val inCycle = cycle.any { it.first == i && it.second == j }
+                        val isPlus = cycle.indexOfFirst { it.first == i && it.second == j } % 2 == 0
+
+                        addView(TextView(context).apply {
+                            text = if (solution[i][j] > 0) {
+                                String.format("%.0f", solution[i][j])
+                            } else {
+                                "-"
+                            }
+                            gravity = Gravity.CENTER
+                            setPadding(8, 8, 8, 8)
+
+                            // Выделяем цветом клетки цикла
+                            if (inCycle) {
+                                setBackgroundColor(
+                                    if (isPlus) Color.parseColor("#90EE90") // Светло-зеленый для +
+                                    else Color.parseColor("#FFB6C1") // Светло-розовый для -
+                                )
+                            }
+                        })
+                    }
+
+                    // Значения запасов
+                    addView(TextView(context).apply {
+                        text = String.format("%.0f", problem.supplies[i])
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                    })
+                })
+            }
+
+            // Добавляем строку потребностей
+            addView(TableRow(context).apply {
+                addView(TextView(context).apply {
+                    text = getString(R.string.header_demands)
+                    gravity = Gravity.CENTER
+                    setPadding(8, 8, 8, 8)
+                })
+
+                for (j in solution[0].indices) {
+                    addView(TextView(context).apply {
+                        text = String.format("%.0f", problem.demands[j])
+                        gravity = Gravity.CENTER
+                        setPadding(8, 8, 8, 8)
+                    })
+                }
+
+                addView(TextView(context).apply {
+                    text = ""
+                    setPadding(8, 8, 8, 8)
                 })
             })
         }

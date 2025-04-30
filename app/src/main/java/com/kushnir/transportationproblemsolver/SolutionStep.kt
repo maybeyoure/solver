@@ -13,8 +13,6 @@ data class SolutionStep(
     val remainingDemands: DoubleArray,
     val isFictive: Boolean = false,
     val fictiveDescription: String? = null,
-
-    // Новые поля для метода Фогеля
     val rowPenalties: DoubleArray? = null,
     val colPenalties: DoubleArray? = null,
     val isVogel: Boolean = false

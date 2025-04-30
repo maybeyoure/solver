@@ -76,8 +76,7 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
                 solution,
                 remainingSupplies,
                 remainingDemands,
-                quantity,
-                "Выбираем реальную ячейку"
+                quantity
             ))
         }
 
@@ -112,8 +111,7 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
                     solution,
                     remainingSupplies,
                     remainingDemands,
-                    quantity,
-                    "Выбираем фиктивную ячейку"
+                    quantity
                 ))
             }
         }

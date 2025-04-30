@@ -42,4 +42,22 @@
     <string name="fictive_supplier_added">Добавляем фиктивного поставщика П%1$d с запасом %2$.0f</string>
     <string name="fictive_store_added">Добавляем фиктивный магазин М%1$d с потребностью %2$.0f</string>
 
+    <string name="optimization_cycle_built">Найден цикл пересчета через клетку (%1$d, %2$d): %3$s\nВеличина сдвига: θ = %4$.0f</string>
+    <string name="optimization_initial_plan">Начальный опорный план. Общая стоимость: %.0f</string>
+    <string name="optimization_fix_degeneracy">План вырожден. Добавляем нулевые поставки для устранения вырожденности</string>
+    <string name="optimization_potentials_calculated">Вычислены потенциалы:\nU = [%1$s]\nV = [%2$s]</string>
+    <string name="optimization_after_redistribution">Поставки перераспределены. Новая стоимость: %.0f</string>
+    <string name="optimization_optimal_found">План оптимален. Итоговая стоимость: %.0f</string>
+    <string name="optimization_header">Оптимизация плана методом потенциалов</string>
+    <string name="optimization_result">Оптимальный план с общей стоимостью: %.0f</string>
+    <string name="optimization_no_steps">Нет доступных шагов оптимизации</string>
+    <string name="optimization_incomplete_result">Итоговый план с общей стоимостью: %.0f (оптимальность не гарантирована)</string>
+    <string name="optimization_small_problem">Для задачи размерностью 2×2 оптимизация не требуется. Текущая стоимость: %.0f</string>
+    <string name="optimization_potentials_error">Ошибка при вычислении потенциалов. Оптимизация остановлена</string>
+    <string name="optimization_cycle_error">Не удалось построить цикл пересчета. Оптимизация остановлена</string>
+    <string name="optimization_max_iterations">Достигнуто максимальное число итераций. Оптимизация остановлена</string>
+    <string name="evaluation_positive">+%.2f</string>
+    <string name="evaluation_negative">%.2f</string>
+    <string name="evaluation_zero">0.00</string>
+
 </resources>

@@ -2,6 +2,7 @@ package com.kushnir.transportationproblemsolver
 
 import android.content.Context
 import android.util.Log
+import com.kushnir.transportationproblemsolver.optimizers.OptimizationStep
 import com.kushnir.transportationproblemsolver.solvers.DoublePreferenceSolver
 import com.kushnir.transportationproblemsolver.solvers.FogelSolver
 import java.io.Serializable
@@ -40,6 +41,55 @@ class TransportationProblem(
 
     }
 
+    fun optimizeSolution(
+        context: Context,
+        methodType: String,
+        objectiveType: String
+    ): Array<DoubleArray> {
+        try {
+            // Получаем шаги оптимизации
+            val steps = optimizeSolutionWithSteps(context, methodType, objectiveType)
+
+            // Возвращаем последнее решение, если шаги есть
+            if (steps.isNotEmpty()) {
+                return steps.last().currentSolution
+            }
+
+            // Иначе возвращаем начальное решение
+            return solve(context, methodType)
+        } catch (e: Exception) {
+            Log.e("TransportationProblem", "Ошибка при получении оптимального решения: ${e.message}", e)
+
+            // В случае ошибки возвращаем начальное решение
+            return solve(context, methodType)
+        }
+    }
+
+    fun optimizeSolutionWithSteps(
+        context: Context,
+        methodType: String,
+        objectiveType: String
+    ): List<OptimizationStep> {
+        try {
+            // Получаем начальное решение
+            val initialSolution = solve(context, methodType)
+
+            // Определяем тип оптимизации (минимум/максимум)
+            val objectives = context.resources.getStringArray(R.array.objectives)
+            val isMinimization = objectiveType == objectives[0] // "Минимальные затраты"
+
+            Log.d("TransportationProblem", "Оптимизация: тип=$objectiveType, минимизация=$isMinimization")
+
+            // Создаем оптимизатор и выполняем оптимизацию
+            val optimizer = com.kushnir.transportationproblemsolver.optimizers.Potential(isMinimization)
+            return optimizer.optimizeWithSteps(context, this, initialSolution)
+        } catch (e: Exception) {
+            Log.e("TransportationProblem", "Ошибка при оптимизации: ${e.message}", e)
+
+            // В случае ошибки возвращаем пустой список
+            return emptyList()
+        }
+    }
     fun isBalanced(): Boolean {
         val totalSupply = supplies.sum()
         val totalDemand = demands.sum()
