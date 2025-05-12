@@ -16,12 +16,10 @@ class ProblemSetupActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_problem_setup)
-
         spinnerRows = findViewById(R.id.spinner_rows)
         spinnerCols = findViewById(R.id.spinner_cols)
         btnNext = findViewById(R.id.btn_next)
 
-        // Настройка адаптеров для спиннеров
         val sizes = (2..10).toList()
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sizes)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -30,7 +28,6 @@ class ProblemSetupActivity : AppCompatActivity() {
         spinnerCols.adapter = adapter
         spinnerRows.setSelection(0)
         spinnerCols.setSelection(0)
-
         spinnerRows.prompt = getString(R.string.select_size_prompt)
         spinnerCols.prompt = getString(R.string.select_size_prompt)
 

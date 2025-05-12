@@ -19,12 +19,24 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity android:name=".ProblemInputActivity"/>
-        <activity android:name=".SolutionActivity"/>
+        <activity
+            android:name=".ProblemInputActivity"
+            android:parentActivityName=".ProblemSetupActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".ProblemSetupActivity" />
+        </activity>
+
+        <activity
+            android:name=".SolutionActivity"
+            android:parentActivityName=".ProblemInputActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".ProblemInputActivity" />
+        </activity>
     </application>
 </manifest>

@@ -12,32 +12,14 @@ class Potential(private val isMinimization: Boolean) {
         private const val MAX_ITERATIONS = 20
     }
 
-    fun     optimizeWithSteps(
+    fun optimizeWithSteps(
         context: Context,
         problem: TransportationProblem,
         initialSolution: Array<DoubleArray>
     ): List<OptimizationStep> {
         try {
-            if (problem.costs.size <= 3 && problem.costs[0].size <= 3) {
-                Log.i("Potential", "Оптимизация малой задачи ${problem.costs.size}x${problem.costs[0].size}")
-
-                val totalCost = calculateTotalCost(problem, initialSolution)
-
-                // Для маленькой задачи просто возвращаем исходный план как оптимальный
-                return listOf(
-                    OptimizationStep(
-                        stepNumber = 1,
-                        description = context.getString(R.string.optimization_small_problem, totalCost),
-                        currentSolution = copyMatrix(initialSolution),
-                        isOptimal = true,
-                        totalCost = totalCost
-                    )
-                )
-            }
-
             val steps = mutableListOf<OptimizationStep>()
 
-            // Проверяем, что размерности решения совпадают с размерностями задачи или больше
             if (initialSolution.size < problem.costs.size || initialSolution[0].size < problem.costs[0].size) {
                 Log.e("Potential", "Несоответствие размеров: решение ${initialSolution.size}x${initialSolution[0].size}, " +
                         "задача ${problem.costs.size}x${problem.costs[0].size}")
@@ -127,8 +109,22 @@ class Potential(private val isMinimization: Boolean) {
                 var iteration = 1
 
                 while (!isOptimal && iteration <= MAX_ITERATIONS) {
+                    // Проверяем, что pivotCell не null перед использованием
+                    if (pivotCell == null) {
+                        steps.add(
+                            OptimizationStep(
+                                stepNumber = steps.size + 1,
+                                description = "Не удалось найти ведущую клетку для неоптимального плана",
+                                currentSolution = copyMatrix(solution),
+                                isOptimal = true, // Чтобы прекратить дальнейшие вычисления
+                                totalCost = calculateTotalCost(problem, solution)
+                            )
+                        )
+                        break
+                    }
+
                     // Строим цикл пересчета с проверкой на ошибки
-                    val cycle = safeBuildCycle(solution, pivotCell!!)
+                    val cycle = safeBuildCycle(solution, pivotCell)
 
                     // Если не удалось построить цикл, прерываем оптимизацию
                     if (cycle.isEmpty()) {
@@ -439,11 +435,10 @@ class Potential(private val isMinimization: Boolean) {
 
         for (i in 0 until rows) {
             for (j in 0 until cols) {
-                // Проверяем, что i и j не выходят за границы массива costs
-                if (i < problem.costs.size && j < problem.costs[0].size) {
+                if (i < problem.costs.size && j < problem.costs[0].size &&
+                    !u[i].isNaN() && !v[j].isNaN()) {
                     evaluations[i][j] = problem.costs[i][j] - u[i] - v[j]
                 } else {
-                    // Для фиктивных клеток используем нулевую оценку
                     evaluations[i][j] = 0.0
                 }
             }
@@ -502,16 +497,14 @@ class Potential(private val isMinimization: Boolean) {
             return cycle
         } catch (e: Exception) {
             Log.e("Potential", "Ошибка при построении цикла", e)
-            return createSimpleCycle(solution, pivotCell)
+            return createSimpleCycle(solution, pivotCell) // Возвращаем пустой список в крайнем случае
         }
     }
 
-    // Создает простой цикл в случае ошибки при построении полного цикла
     private fun createSimpleCycle(
         solution: Array<DoubleArray>,
         pivotCell: Pair<Int, Int>
     ): List<Pair<Int, Int>> {
-        // Получаем список базисных клеток
         val basisCells = mutableListOf<Pair<Int, Int>>()
         for (i in solution.indices) {
             for (j in solution[0].indices) {
@@ -539,7 +532,6 @@ class Potential(private val isMinimization: Boolean) {
             }
         }
 
-        // Если не получилось построить цикл, возвращаем пустой список
         return emptyList()
     }
 
@@ -758,7 +750,12 @@ class Potential(private val isMinimization: Boolean) {
 
         return OptimizationStep(
             stepNumber = 1,
-            description = context.getString(R.string.optimization_initial_plan, totalCost),
+            description = context.getString(
+                R.string.optimization_initial_plan,
+                problem.costs.size,
+                problem.costs[0].size,
+                totalCost
+            ),
             currentSolution = copyMatrix(solution),
             totalCost = totalCost
         )

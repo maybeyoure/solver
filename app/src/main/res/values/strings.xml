@@ -2,7 +2,6 @@
     <string name="app_name">Транспортная задача</string>
     <string name="input_header">Заполните матрицу тарифов, выберите метод нахождения начального плана</string>
     <string name="btn_next">Далее</string>
-
     <string name="header_supplier">П%1$d</string>
     <string name="header_store">M%1$d</string>
     <string name="header_supplies">Запасы</string>
@@ -35,15 +34,14 @@
     <string name="fictive_supplier">Добавлен фиктивный поставщик П%1$d</string>
     <string name="fictive_store">Добавлен фиктивный магазин М%1$d</string>
     <string name="total_cost">Общая стоимость перевозок: %1$.0f</string>
-    <string name="balance_check">Проверим необходимое и достаточное условие разрешимости задачи.\n∑a = %1$.0f\n∑b = %2$.0f</string>
+    <string name="balance_check">Проверим необходимое и достаточное условие разрешимости задачи.\n∑П = %1$.0f\n∑М = %2$.0f</string>
     <string name="balance_result">Условие баланса соблюдается. Запасы равны потребностям. Следовательно, модель транспортной задачи является %1$s.</string>
     <string name="step_description">Шаг %1$d: Искомый элемент находится в клетке (%2$d;%3$d) и равен c%2$d%3$d=%4$.0f</string>
     <string name="distribution_description">x%1$d%2$d = min(%3$.0f, %4$.0f) = %5$.0f</string>
-    <string name="fictive_supplier_added">Добавляем фиктивного поставщика П%1$d с запасом %2$.0f</string>
-    <string name="fictive_store_added">Добавляем фиктивный магазин М%1$d с потребностью %2$.0f</string>
+    <string name="fictive_supplier_added">Добавляем фиктивного поставщика П%1$d с запасом %2$.0f.</string>
+    <string name="fictive_store_added">Добавляем фиктивный магазин М%1$d с потребностью %2$.0f.</string>
 
     <string name="optimization_cycle_built">Найден цикл пересчета через клетку (%1$d, %2$d): %3$s\nВеличина сдвига: θ = %4$.0f</string>
-    <string name="optimization_initial_plan">Начальный опорный план. Общая стоимость: %.0f</string>
     <string name="optimization_fix_degeneracy">План вырожден. Добавляем нулевые поставки для устранения вырожденности</string>
     <string name="optimization_potentials_calculated">Вычислены потенциалы:\nU = [%1$s]\nV = [%2$s]</string>
     <string name="optimization_after_redistribution">Поставки перераспределены. Новая стоимость: %.0f</string>
@@ -52,7 +50,7 @@
     <string name="optimization_result">Оптимальный план с общей стоимостью: %.0f</string>
     <string name="optimization_no_steps">Нет доступных шагов оптимизации</string>
     <string name="optimization_incomplete_result">Итоговый план с общей стоимостью: %.0f (оптимальность не гарантирована)</string>
-    <string name="optimization_small_problem">Для задачи размерностью 2×2 оптимизация не требуется. Текущая стоимость: %.0f</string>
+    <string name="optimization_initial_plan">Начальный опорный план для задачи размерностью %1$dx%2$d. Проверим его оптимальность. Текущая стоимость: %3$.0f</string>
     <string name="optimization_potentials_error">Ошибка при вычислении потенциалов. Оптимизация остановлена</string>
     <string name="optimization_cycle_error">Не удалось построить цикл пересчета. Оптимизация остановлена</string>
     <string name="optimization_max_iterations">Достигнуто максимальное число итераций. Оптимизация остановлена</string>

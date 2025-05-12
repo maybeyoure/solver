@@ -132,100 +132,90 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
         remainingDemands: DoubleArray,
         onlyReal: Boolean
     ): Pair<Int, Int> {
-        var maxDiff = -1.0
-        var selectedRow = -1
-        var selectedCol = -1
-
-        // Ограничим поиск реальными ячейками, если необходимо
         val rowsLimit = if (onlyReal) minOf(originalRows, remainingSupplies.size) else remainingSupplies.size
         val colsLimit = if (onlyReal) minOf(originalCols, remainingDemands.size) else remainingDemands.size
 
-        // Поиск по строкам
+        // 1. Определяем минимальные элементы в каждой строке
+        val rowMinIndices = mutableListOf<Pair<Int, Int>>() // (row, col)
         for (i in 0 until rowsLimit) {
             if (remainingSupplies[i] <= 0) continue
 
-            val availableCosts = mutableListOf<Pair<Double, Int>>()
+            var minValue = Double.MAX_VALUE
+            var minColIndex = -1
+
             for (j in 0 until colsLimit) {
-                if (remainingDemands[j] > 0) {
-                    availableCosts.add(balancedProblem.costs[i][j] to j)
+                if (remainingDemands[j] <= 0) continue
+
+                val cost = balancedProblem.costs[i][j]
+                if (cost < minValue) {
+                    minValue = cost
+                    minColIndex = j
                 }
             }
 
-            if (availableCosts.size >= 2) {
-                availableCosts.sortBy { it.first }
-                val diff = availableCosts[1].first - availableCosts[0].first
-                if (diff > maxDiff) {
-                    maxDiff = diff
-                    selectedRow = i
-                    selectedCol = availableCosts[0].second
-                }
-            } else if (availableCosts.size == 1 && maxDiff == -1.0) {
-                // Если только одна доступная ячейка и еще не нашли разницу
-                selectedRow = i
-                selectedCol = availableCosts[0].second
+            if (minColIndex != -1) {
+                rowMinIndices.add(Pair(i, minColIndex))
             }
         }
 
-        // Поиск по столбцам
+        // 2. Определяем минимальные элементы в каждом столбце
+        val colMinIndices = mutableListOf<Pair<Int, Int>>() // (row, col)
         for (j in 0 until colsLimit) {
             if (remainingDemands[j] <= 0) continue
 
-            val availableCosts = mutableListOf<Pair<Double, Int>>()
+            var minValue = Double.MAX_VALUE
+            var minRowIndex = -1
+
             for (i in 0 until rowsLimit) {
-                if (remainingSupplies[i] > 0) {
-                    availableCosts.add(balancedProblem.costs[i][j] to i)
+                if (remainingSupplies[i] <= 0) continue
+
+                val cost = balancedProblem.costs[i][j]
+                if (cost < minValue) {
+                    minValue = cost
+                    minRowIndex = i
                 }
             }
 
-            if (availableCosts.size >= 2) {
-                availableCosts.sortBy { it.first }
-                val diff = availableCosts[1].first - availableCosts[0].first
-                if (diff > maxDiff) {
-                    maxDiff = diff
-                    selectedRow = availableCosts[0].second
+            if (minRowIndex != -1) {
+                colMinIndices.add(Pair(minRowIndex, j))
+            }
+        }
+
+        // 3. Находим клетки с двойным предпочтением
+        val doublePreferredCells = rowMinIndices.filter { cell ->
+            colMinIndices.any { it.first == cell.first && it.second == cell.second }
+        }
+
+        // Если есть клетки с двойным предпочтением, выбираем минимальную
+        if (doublePreferredCells.isNotEmpty()) {
+            return doublePreferredCells.minByOrNull { balancedProblem.costs[it.first][it.second] }
+                ?: doublePreferredCells.first()
+        }
+
+        // 4. Если нет клеток с двойным предпочтением, выбираем из клеток с одним предпочтением
+        val singlePreferredCells = (rowMinIndices + colMinIndices).distinct()
+        if (singlePreferredCells.isNotEmpty()) {
+            return singlePreferredCells.minByOrNull { balancedProblem.costs[it.first][it.second] }
+                ?: singlePreferredCells.first()
+        }
+
+        // 5. Если нет клеток с предпочтением, выбираем минимальный элемент
+        var minCost = Double.MAX_VALUE
+        var selectedRow = -1
+        var selectedCol = -1
+
+        for (i in 0 until rowsLimit) {
+            if (remainingSupplies[i] <= 0) continue
+            for (j in 0 until colsLimit) {
+                if (remainingDemands[j] > 0 && balancedProblem.costs[i][j] < minCost) {
+                    minCost = balancedProblem.costs[i][j]
+                    selectedRow = i
                     selectedCol = j
                 }
-            } else if (availableCosts.size == 1 && maxDiff == -1.0) {
-                // Если только одна доступная ячейка и еще не нашли разницу
-                selectedRow = availableCosts[0].second
-                selectedCol = j
             }
         }
 
-        // Если не нашли по разностям, выбираем минимальный элемент
-        if (selectedRow == -1 || selectedCol == -1) {
-            var minCost = Double.MAX_VALUE
-            for (i in 0 until rowsLimit) {
-                if (remainingSupplies[i] <= 0) continue
-                for (j in 0 until colsLimit) {
-                    if (remainingDemands[j] > 0 && balancedProblem.costs[i][j] < minCost) {
-                        minCost = balancedProblem.costs[i][j]
-                        selectedRow = i
-                        selectedCol = j
-                    }
-                }
-            }
-        }
-
-        // Если все еще не нашли ячейку и обрабатываем только реальные пути,
-        // значит все реальные пути распределены и нужно вернуть (-1, -1)
-        if ((selectedRow == -1 || selectedCol == -1) && onlyReal) {
-            return -1 to -1
-        }
-
-        // Если не нашли ячейку среди всех, находим любую доступную ячейку
-        if (selectedRow == -1 || selectedCol == -1) {
-            for (i in remainingSupplies.indices) {
-                if (remainingSupplies[i] <= 0) continue
-                for (j in remainingDemands.indices) {
-                    if (remainingDemands[j] > 0) {
-                        return i to j
-                    }
-                }
-            }
-        }
-
-        return selectedRow to selectedCol
+        return Pair(selectedRow, selectedCol)
     }
 
     private fun allocateResources(solution: Array<DoubleArray>, remainingSupplies: DoubleArray, remainingDemands: DoubleArray, selectedRow: Int, selectedCol: Int): Double {

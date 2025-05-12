@@ -34,7 +34,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:spinnerMode="dropdown"/>
+        android:spinnerMode="dropdown" />
 
     <Spinner
         android:id="@+id/spinner_method"
@@ -42,12 +42,10 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:spinnerMode="dropdown"/>
-
     <Button
         android:id="@+id/btn_solve"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/btn_next"
         android:layout_marginTop="16dp"/>
-
 </LinearLayout>

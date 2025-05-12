@@ -14,6 +14,7 @@ import android.widget.HorizontalScrollView
 import android.widget.Toast
 import android.graphics.Color
 import android.graphics.Typeface
+import android.widget.ImageButton
 import kotlin.math.abs
 import com.kushnir.transportationproblemsolver.solvers.DoublePreferenceSolver
 import com.kushnir.transportationproblemsolver.solvers.FogelSolver
@@ -29,6 +30,11 @@ class SolutionActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_solution)
+        val btnBack = findViewById<ImageButton>(R.id.btn_back2)
+        // В SolutionActivity:
+        btnBack.setOnClickListener {
+            onBackPressed()
+        }
 
         try {
             balanceConditionText = findViewById(R.id.balance_condition_text)
@@ -531,21 +537,20 @@ class SolutionActivity : AppCompatActivity() {
             }
         }
 
-        // Добавляем итоговый результат
-        if (optimizationSteps.isNotEmpty()) {
-            val lastStep = optimizationSteps.last()
-            val resultText = TextView(this).apply {
-                text = getString(
-                    if (lastStep.isOptimal) R.string.optimization_result
-                    else R.string.optimization_incomplete_result,
-                    lastStep.totalCost
-                )
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-                setPadding(0, 16, 0, 16)
-                setTypeface(null, Typeface.BOLD)
-            }
-            solutionStepsContainer.addView(resultText)
-        }
+//        if (optimizationSteps.isNotEmpty()) {
+//            val lastStep = optimizationSteps.last()
+//            val resultText = TextView(this).apply {
+//                text = getString(
+//                    if (lastStep.isOptimal) R.string.optimization_result
+//                    else R.string.optimization_incomplete_result,
+//                    lastStep.totalCost
+//                )
+//                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+//                setPadding(0, 16, 0, 16)
+//                setTypeface(null, Typeface.BOLD)
+//            }
+//            solutionStepsContainer.addView(resultText)
+//        }
     }
 
     private fun createMatrixTableWithEvaluations(
@@ -670,7 +675,7 @@ class SolutionActivity : AppCompatActivity() {
         }
     }
 
-    private fun createMatrixTableWithCycle(
+    fun createMatrixTableWithCycle(
         solution: Array<DoubleArray>,
         problem: TransportationProblem,
         cycle: List<Pair<Int, Int>>

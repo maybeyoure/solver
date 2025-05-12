@@ -21,26 +21,24 @@ class ProblemInputActivity : AppCompatActivity() {
     private lateinit var costsMatrix: Array<Array<EditText>>
     private lateinit var suppliesInputs: Array<EditText>
     private lateinit var demandsInputs: Array<EditText>
+    private var isTableCreated = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_problem_input)
 
-        // Инициализация views
+        // Инициализация каждого компонента по ID
         tableLayout = findViewById(R.id.table_costs)
         btnSolve = findViewById(R.id.btn_solve)
         spinnerMethod = findViewById(R.id.spinner_method)
         spinnerObjective = findViewById(R.id.spinner_objective)
 
-        // Настройка спиннеров - это быстрая операция, можно оставить в главном потоке
         setupSpinners()
-
-        // Получение размеров матрицы
         val numRows = intent.getIntExtra("numRows", 0)
         val numCols = intent.getIntExtra("numCols", 0)
         viewModel.initializeMatrices(this, numRows, numCols)
 
-        // Запускаем тяжелые операции в фоновом потоке
+        // Запускаем тяжелые операции в фоновом потоке, чтобы избежать блокировки UI
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
@@ -49,17 +47,27 @@ class ProblemInputActivity : AppCompatActivity() {
                             costsMatrix = state.costsMatrix
                             suppliesInputs = state.suppliesInputs
                             demandsInputs = state.demandsInputs
-                            createTable(numRows, numCols)
+
+                            // Только если таблица еще не создана в UI
+                            if (tableLayout.childCount == 0) {
+                                createTable(numRows, numCols)
+                                // Восстанавливаем значения, если они были сохранены
+                                viewModel.restoreMatrixValues()
+                            }
                         }
 
                         ProblemInputViewModel.UiState.Initial -> {
-                            // Начальное состояние, ничего не делаем
+                            // Начальное состояние
                         }
                     }
                 }
             }
         }// Настройка кнопок
         setupButtons()
+    }
+    override fun onPause() {
+        super.onPause()
+        viewModel.saveMatrixValues()
     }
 
     private fun setupButtons() {
@@ -74,10 +82,7 @@ class ProblemInputActivity : AppCompatActivity() {
                     try {
                         val problem = createProblem()
                         withContext(Dispatchers.Main) {
-                            val intent = Intent(
-                                this@ProblemInputActivity,
-                                SolutionActivity::class.java
-                            ).apply {
+                            val intent = Intent(this@ProblemInputActivity, SolutionActivity::class.java).apply {
                                 putExtra("problem", problem)
                                 putExtra("methodType", spinnerMethod.selectedItem.toString())
                                 putExtra("objectiveType", spinnerObjective.selectedItem.toString())
@@ -142,29 +147,25 @@ class ProblemInputActivity : AppCompatActivity() {
     }
 
     private fun createTable(numRows: Int, numCols: Int) {
-        // Создание заголовков
+        tableLayout.removeAllViews()
         val headerRow = TableRow(this)
         headerRow.addView(TextView(this))
 
-        // Добавление заголовков для магазинов
-        for (j in 0 until numCols) {
+        for (j in 0 until numCols) { // Добавление заголовков для магазинов
             val headerCell = TextView(this).apply {
                 text = getString(R.string.header_store, j + 1)
                 setPadding(8, 8, 8, 8)
             }
             headerRow.addView(headerCell)
         }
-
-        // Добавление колонки для запасов
-        val supplyHeader = TextView(this).apply {
+        val supplyHeader = TextView(this).apply { // Добавление колонки для запасов
             text = getString(R.string.header_supplies)
             setPadding(8, 8, 8, 8)
         }
         headerRow.addView(supplyHeader)
         tableLayout.addView(headerRow)
 
-        // Создание строк с данными
-        for (i in 0 until numRows) {
+        for (i in 0 until numRows) {// Создание строк с данными
             val row = TableRow(this)
 
             // Добавление заголовка строки (поставщик)
