@@ -3,6 +3,7 @@ package com.kushnir.transportationproblemsolver
 import android.content.Context
 import android.util.Log
 import com.kushnir.transportationproblemsolver.optimizers.OptimizationStep
+import com.kushnir.transportationproblemsolver.optimizers.Potential
 import com.kushnir.transportationproblemsolver.solvers.DoublePreferenceSolver
 import com.kushnir.transportationproblemsolver.solvers.FogelSolver
 import java.io.Serializable
@@ -72,7 +73,19 @@ class TransportationProblem(
     ): List<OptimizationStep> {
         try {
             // Получаем начальное решение
-            val initialSolution = solve(context, methodType)
+            val solutionSteps = solveWithSteps(context, methodType)
+            val initialSolution = if (solutionSteps.isNotEmpty()) {
+                solutionSteps.last().currentSolution
+            } else {
+                solve(context, methodType)
+            }
+
+            // Получаем список базисных нулей из последнего шага
+            val initialBasicZeroCells = if (solutionSteps.isNotEmpty()) {
+                solutionSteps.last().basicZeroCells ?: emptyList()
+            } else {
+                emptyList()
+            }
 
             // Определяем тип оптимизации (минимум/максимум)
             val objectives = context.resources.getStringArray(R.array.objectives)
@@ -81,12 +94,15 @@ class TransportationProblem(
             Log.d("TransportationProblem", "Оптимизация: тип=$objectiveType, минимизация=$isMinimization")
 
             // Создаем оптимизатор и выполняем оптимизацию
-            val optimizer = com.kushnir.transportationproblemsolver.optimizers.Potential(isMinimization)
-            return optimizer.optimizeWithSteps(context, this, initialSolution)
+            val optimizer = Potential(isMinimization)
+            return optimizer.optimizeWithSteps(
+                context,
+                this,
+                initialSolution,
+                initialBasicZeroCells  // Передаем список базисных нулей
+            )
         } catch (e: Exception) {
             Log.e("TransportationProblem", "Ошибка при оптимизации: ${e.message}", e)
-
-            // В случае ошибки возвращаем пустой список
             return emptyList()
         }
     }

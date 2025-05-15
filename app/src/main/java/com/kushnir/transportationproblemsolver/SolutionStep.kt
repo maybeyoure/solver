@@ -15,5 +15,8 @@ data class SolutionStep(
     val fictiveDescription: String? = null,
     val rowPenalties: DoubleArray? = null,
     val colPenalties: DoubleArray? = null,
-    val isVogel: Boolean = false
+    val isVogel: Boolean = false,
+    val doublePreferenceCells: List<Pair<Int, Int>>? = null,
+    val singlePreferenceCells: List<Pair<Int, Int>>? = null,
+    val basicZeroCells: List<Pair<Int, Int>>? = null
 ) : Serializable

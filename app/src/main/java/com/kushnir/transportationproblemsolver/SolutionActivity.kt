@@ -31,7 +31,6 @@ class SolutionActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_solution)
         val btnBack = findViewById<ImageButton>(R.id.btn_back2)
-        // В SolutionActivity:
         btnBack.setOnClickListener {
             onBackPressed()
         }
@@ -62,13 +61,10 @@ class SolutionActivity : AppCompatActivity() {
 
             displaySolutionSteps(solutionSteps, problem)
 
-            // Добавляем оптимизацию плана
             val optimizationSteps = problem.optimizeSolutionWithSteps(this, methodType, objectiveType)
 
-            // Логирование для отладки
             Log.d("SolutionActivity", "Optimization steps count: ${optimizationSteps.size}")
 
-            // Отображаем шаги оптимизации
             displayOptimizationSteps(optimizationSteps, problem)
 
         } catch (e: Exception) {
@@ -155,8 +151,8 @@ class SolutionActivity : AppCompatActivity() {
                     )
                     horizontalScrollView.addView(matrixTable)
                 } else {
-                    // Для других методов используем обычную матрицу
-                    val matrixTable = createMatrixTable(step.currentSolution, balancedProblem)
+                    // Для других методов используем обычную матрицу с предпочтениями
+                    val matrixTable = createMatrixTable(step.currentSolution, balancedProblem, step)
                     horizontalScrollView.addView(matrixTable)
                 }
                 stepContainer.addView(horizontalScrollView)
@@ -179,7 +175,8 @@ class SolutionActivity : AppCompatActivity() {
 
     private fun createMatrixTable(
         solution: Array<DoubleArray>,
-        problem: TransportationProblem
+        problem: TransportationProblem,
+        step: SolutionStep
     ): TableLayout {
         return TableLayout(this).apply {
             layoutParams = TableLayout.LayoutParams(
@@ -207,10 +204,8 @@ class SolutionActivity : AppCompatActivity() {
                 })
             })
 
-            // Добавляем строки с данными
             for (i in solution.indices) {
                 addView(TableRow(context).apply {
-                    // Заголовок строки
                     addView(TextView(context).apply {
                         text = getString(R.string.header_supplier, i + 1)
                         gravity = Gravity.CENTER
@@ -218,26 +213,45 @@ class SolutionActivity : AppCompatActivity() {
                         setPadding(8, 8, 8, 8)
                     })
 
-                    // Значения решения
                     for (j in solution[i].indices) {
                         addView(TextView(context).apply {
-                            text = if (solution[i][j] > 0) {
-                                String.format("%.0f", solution[i][j])
-                            } else {
-                                "-"
+                            val cellText = StringBuilder()
+
+                            // Проверяем, является ли эта клетка базисным нулем - используем список из SolutionStep
+                            val isCurrentCellBasicZero = step.basicZeroCells?.any { it.first == i && it.second == j } == true
+
+                            // Отображаем базисный нуль как "0"
+                            if (isCurrentCellBasicZero) {
+                                cellText.append("0")
                             }
+                            // Обычное положительное значение
+                            else if (solution[i][j] > 0) {
+                                cellText.append(String.format("%.0f", solution[i][j]))
+                            }
+                            // Пустая клетка
+                            else {
+                                cellText.append("-")
+                            }
+
+                            // Добавляем обозначение предпочтения, если есть
+                            if (step.doublePreferenceCells?.contains(Pair(i, j)) == true) {
+                                cellText.append("[VV]") // Двойное предпочтение
+                            } else if (step.singlePreferenceCells?.contains(Pair(i, j)) == true) {
+                                cellText.append("[V]") // Одинарное предпочтение
+                            }
+
+                            text = cellText.toString()
                             gravity = Gravity.CENTER
                             minWidth = 80
                             setPadding(8, 8, 8, 8)
 
-                            // Добавить подсветку фиктивных путей
-                            if ((i >= problem.costs.size || j >= problem.costs[0].size) && solution[i][j] > 0) {
+                            if ((i >= problem.costs.size || j >= problem.costs[0].size) &&
+                                (solution[i][j] > 0 || isCurrentCellBasicZero)) {
                                 setBackgroundColor(Color.parseColor("#FFECB3"))
                             }
                         })
                     }
 
-                    // Значения запасов
                     addView(TextView(context).apply {
                         text = if (i < problem.supplies.size) {
                             String.format("%.0f", problem.supplies[i])
@@ -456,6 +470,56 @@ class SolutionActivity : AppCompatActivity() {
             setTypeface(null, Typeface.BOLD)
         }
         solutionStepsContainer.addView(optimizationHeader)
+        val firstStep = optimizationSteps.firstOrNull() ?: return
+        val solutionMatrix = firstStep.currentSolution
+        val basicZeroCells = firstStep.basicZeroCells ?: emptyList()
+        var occupiedCells = 0
+        // Проверка на вырожденность
+        val rows = solutionMatrix.size
+        val cols = solutionMatrix[0].size
+        val requiredCells = rows + cols - 1
+        for (i in solutionMatrix.indices) {
+            for (j in solutionMatrix[i].indices) {
+                if (solutionMatrix[i][j] > 0 || basicZeroCells.contains(Pair(i, j))) {
+                    occupiedCells++
+                }
+            }
+        }
+        val isDegeneratePlan = occupiedCells < requiredCells
+
+        val degeneracyInfo = TextView(this).apply {
+            text = "Число занятых клеток должно быть равно m + n - 1. " +
+                    "$rows+$cols-1 = $requiredCells. Занятых клеток получилось $occupiedCells. " +
+                    "Следовательно, опорный план ${if (isDegeneratePlan) "является" else "не является"} вырожденным."
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(0, 8, 0, 8)
+        }
+        solutionStepsContainer.addView(degeneracyInfo)
+
+        // Рассчитываем значение целевой функции
+        var totalCost = 0.0
+        for (i in solutionMatrix.indices) {
+            for (j in solutionMatrix[i].indices) {
+                if (i < problem.costs.size && j < problem.costs[0].size) {
+                    // Учитываем положительные значения
+                    if (solutionMatrix[i][j] > 0) {
+                        totalCost += solutionMatrix[i][j] * problem.costs[i][j]
+                    }
+                    else if (basicZeroCells.contains(Pair(i, j))) {
+                    }
+                }
+            }
+        }
+
+        // Добавляем информацию о целевой функции
+        val functionValueInfo = TextView(this).apply {
+            text = "Значение целевой функции для этого опорного плана равно:\n" +
+                    "F(x) = " + buildFunctionFormula(solutionMatrix, problem.costs) + " = " +
+                    String.format("%.0f", totalCost)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(0, 8, 0, 16)
+        }
+        solutionStepsContainer.addView(functionValueInfo)
 
         // Проверяем, есть ли шаги для отображения
         if (optimizationSteps.isEmpty()) {
@@ -518,9 +582,23 @@ class SolutionActivity : AppCompatActivity() {
                             step.cyclePoints
                         )
                     }
-
                     else -> {
-                        createMatrixTable(step.currentSolution, problem)
+                        // Здесь нужно передать фиктивный SolutionStep, так как в новой версии createMatrixTable
+                        // ожидает этот параметр, но для шагов оптимизации у нас нет информации о предпочтениях
+                        val dummyStep = SolutionStep(
+                            stepNumber = 0,
+                            description = "",
+                            selectedRow = -1,
+                            selectedCol = -1,
+                            quantity = 0.0,
+                            currentSolution = step.currentSolution,
+                            remainingSupplies = DoubleArray(0),
+                            remainingDemands = DoubleArray(0),
+                            doublePreferenceCells = null,
+                            singlePreferenceCells = null,
+                            basicZeroCells = null
+                        )
+                        createMatrixTable(step.currentSolution, problem, dummyStep)
                     }
                 }
 
@@ -536,21 +614,6 @@ class SolutionActivity : AppCompatActivity() {
                 solutionStepsContainer.addView(errorText)
             }
         }
-
-//        if (optimizationSteps.isNotEmpty()) {
-//            val lastStep = optimizationSteps.last()
-//            val resultText = TextView(this).apply {
-//                text = getString(
-//                    if (lastStep.isOptimal) R.string.optimization_result
-//                    else R.string.optimization_incomplete_result,
-//                    lastStep.totalCost
-//                )
-//                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-//                setPadding(0, 16, 0, 16)
-//                setTypeface(null, Typeface.BOLD)
-//            }
-//            solutionStepsContainer.addView(resultText)
-//        }
     }
 
     private fun createMatrixTableWithEvaluations(
@@ -777,7 +840,8 @@ class SolutionActivity : AppCompatActivity() {
 
     private fun calculateTotalCost(
         solution: Array<DoubleArray>,
-        problem: TransportationProblem
+        problem: TransportationProblem,
+        basicZeroCells: List<Pair<Int, Int>>? = null
     ): Double {
         var totalCost = 0.0
         for (i in solution.indices) {
@@ -785,8 +849,39 @@ class SolutionActivity : AppCompatActivity() {
                 if (i < problem.costs.size && j < problem.costs[0].size) {
                     totalCost += solution[i][j] * problem.costs[i][j]
                 }
+                else if (basicZeroCells?.contains(Pair(i, j)) == true) {
+                }
             }
         }
         return totalCost
+    }
+    private fun buildFunctionFormula(
+        solution: Array<DoubleArray>,
+        costs: Array<DoubleArray>,
+        basicZeroCells: List<Pair<Int, Int>>? = null
+    ): String {
+        val terms = mutableListOf<String>()
+
+        // Проходим по всем ячейкам матрицы
+        for (i in solution.indices) {
+            for (j in solution[i].indices) {
+                // Проверяем, что индексы в пределах матрицы стоимостей
+                if (i < costs.size && j < costs[0].size) {
+                    // Ячейка с положительным значением
+                    if (solution[i][j] > 0) {
+                        // Форматируем как "стоимость*количество"
+                        terms.add("${costs[i][j].toInt()}*${solution[i][j].toInt()}")
+                    }
+                    // Базисный нуль - включаем в формулу
+                    else if (basicZeroCells?.contains(Pair(i, j)) == true) {
+                        // Для базисных нулей показываем "стоимость*0"
+                        terms.add("${costs[i][j].toInt()}*0")
+                    }
+                }
+            }
+        }
+
+        // Соединяем все члены знаком плюс
+        return terms.joinToString(" + ")
     }
 }

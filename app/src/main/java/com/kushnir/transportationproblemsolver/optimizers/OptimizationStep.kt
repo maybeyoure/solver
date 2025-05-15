@@ -15,5 +15,6 @@ data class OptimizationStep(
     val pivotCell: Pair<Int, Int>? = null,  // Ведущая клетка
     val theta: Double? = null,  // Величина сдвига по циклу
     val isOptimal: Boolean = false,
-    val totalCost: Double = 0.0
+    val totalCost: Double = 0.0,
+    val basicZeroCells: List<Pair<Int, Int>>? = null
 ) : Serializable

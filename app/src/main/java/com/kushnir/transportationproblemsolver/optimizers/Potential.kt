@@ -15,7 +15,8 @@ class Potential(private val isMinimization: Boolean) {
     fun optimizeWithSteps(
         context: Context,
         problem: TransportationProblem,
-        initialSolution: Array<DoubleArray>
+        initialSolution: Array<DoubleArray>,
+        initialBasicZeroCells: List<Pair<Int, Int>> = emptyList()
     ): List<OptimizationStep> {
         try {
             val steps = mutableListOf<OptimizationStep>()
@@ -31,23 +32,24 @@ class Potential(private val isMinimization: Boolean) {
                         description = "Ошибка: несоответствие размерностей решения и задачи",
                         currentSolution = copyMatrix(initialSolution),
                         isOptimal = true,
-                        totalCost = calculateTotalCost(problem, initialSolution)
+                        totalCost = calculateTotalCost(problem, initialSolution),
+                        basicZeroCells = initialBasicZeroCells
                     )
                 )
             }
 
             // Копируем решение
             val solution = copyMatrix(initialSolution)
+            val initialBasicZeroCells = mutableListOf<Pair<Int, Int>>()
 
             // Добавляем шаг с исходным планом
-            steps.add(createInitialStep(context, problem, solution))
+            steps.add(createInitialStep(context, problem, solution, initialBasicZeroCells))
 
             // Проверяем и исправляем вырожденность плана
             if (ensureNonDegeneratePlan(solution)) {
                 steps.add(createDegeneracyFixStep(context, problem, solution, steps.size + 1))
             }
 
-            // Вычисляем потенциалы и проверяем, что они вычислены успешно
             try {
                 val potentials = safeCalculatePotentials(problem, solution)
                 if (potentials == null) {
@@ -58,7 +60,8 @@ class Potential(private val isMinimization: Boolean) {
                             description = context.getString(R.string.optimization_potentials_error),
                             currentSolution = copyMatrix(solution),
                             isOptimal = true, // Чтобы прекратить дальнейшие вычисления
-                            totalCost = calculateTotalCost(problem, solution)
+                            totalCost = calculateTotalCost(problem, solution),
+                            basicZeroCells = initialBasicZeroCells
                         )
                     )
                     return steps
@@ -77,7 +80,8 @@ class Potential(private val isMinimization: Boolean) {
                             description = "Ошибка при вычислении оценок: ${e.message}",
                             currentSolution = copyMatrix(solution),
                             isOptimal = true,
-                            totalCost = calculateTotalCost(problem, solution)
+                            totalCost = calculateTotalCost(problem, solution),
+                            basicZeroCells = initialBasicZeroCells
                         )
                     )
                     return steps
@@ -117,7 +121,8 @@ class Potential(private val isMinimization: Boolean) {
                                 description = "Не удалось найти ведущую клетку для неоптимального плана",
                                 currentSolution = copyMatrix(solution),
                                 isOptimal = true, // Чтобы прекратить дальнейшие вычисления
-                                totalCost = calculateTotalCost(problem, solution)
+                                totalCost = calculateTotalCost(problem, solution),
+                                basicZeroCells = initialBasicZeroCells
                             )
                         )
                         break
@@ -134,7 +139,8 @@ class Potential(private val isMinimization: Boolean) {
                                 description = context.getString(R.string.optimization_cycle_error),
                                 currentSolution = copyMatrix(solution),
                                 isOptimal = true, // Чтобы прекратить дальнейшие вычисления
-                                totalCost = calculateTotalCost(problem, solution)
+                                totalCost = calculateTotalCost(problem, solution),
+                                basicZeroCells = initialBasicZeroCells
                             )
                         )
                         break
@@ -150,7 +156,8 @@ class Potential(private val isMinimization: Boolean) {
                                 description = "Ошибка: некорректное значение величины сдвига",
                                 currentSolution = copyMatrix(solution),
                                 isOptimal = true,
-                                totalCost = calculateTotalCost(problem, solution)
+                                totalCost = calculateTotalCost(problem, solution),
+                                basicZeroCells = initialBasicZeroCells
                             )
                         )
                         break
@@ -185,7 +192,8 @@ class Potential(private val isMinimization: Boolean) {
                                 description = context.getString(R.string.optimization_potentials_error),
                                 currentSolution = copyMatrix(solution),
                                 isOptimal = true,
-                                totalCost = calculateTotalCost(problem, solution)
+                                totalCost = calculateTotalCost(problem, solution),
+                                basicZeroCells = initialBasicZeroCells
                             )
                         )
                         break
@@ -204,7 +212,8 @@ class Potential(private val isMinimization: Boolean) {
                                 description = "Ошибка при пересчете оценок: ${e.message}",
                                 currentSolution = copyMatrix(solution),
                                 isOptimal = true,
-                                totalCost = calculateTotalCost(problem, solution)
+                                totalCost = calculateTotalCost(problem, solution),
+                                basicZeroCells = initialBasicZeroCells
                             )
                         )
                         break
@@ -257,7 +266,8 @@ class Potential(private val isMinimization: Boolean) {
                         description = "Ошибка при оптимизации: ${e.message}",
                         currentSolution = copyMatrix(solution),
                         isOptimal = true,
-                        totalCost = calculateTotalCost(problem, solution)
+                        totalCost = calculateTotalCost(problem, solution),
+                        basicZeroCells = initialBasicZeroCells
                     )
                 )
             }
@@ -345,43 +355,48 @@ class Potential(private val isMinimization: Boolean) {
 
         val u = DoubleArray(rows) { Double.NaN }
         val v = DoubleArray(cols) { Double.NaN }
-
-        // Устанавливаем u[0] = 0
         u[0] = 0.0
 
-        // Собираем базисные клетки (с положительными поставками)
         val basisCells = mutableListOf<Pair<Int, Int>>()
+
         for (i in 0 until rows) {
             for (j in 0 until cols) {
-                // Проверяем, что i и j находятся в пределах матрицы costs
                 if (i < problem.costs.size && j < problem.costs[0].size && solution[i][j] > EPSILON) {
                     basisCells.add(Pair(i, j))
+                }
+            }
+        }
+        for (i in 0 until rows) {
+            for (j in 0 until cols) {
+                if (i < problem.costs.size && j < problem.costs[0].size &&
+                    solution[i][j] == 0.0 &&
+                    !basisCells.contains(Pair(i, j)) &&
+                    isCellBasicZero(solution, i, j)) {
+                    basisCells.add(Pair(i, j))
+                    Log.d("Potential", "Добавлен базисный ноль в расчет потенциалов: ($i, $j)")
                 }
             }
         }
 
         var updated = true
         var iterations = 0
-        val maxIterations = (rows + cols) * 2 // Увеличиваем лимит итераций
+        val maxIterations = (rows + cols) * 2
 
         while (updated && iterations < maxIterations) {
             updated = false
             iterations++
 
             for ((i, j) in basisCells) {
-                // Добавляем проверку границ
                 if (i >= rows || j >= cols) {
-                    continue // Пропускаем ячейки, выходящие за границы
+                    continue
                 }
 
                 if (!u[i].isNaN() && v[j].isNaN()) {
-                    // Проверяем границы для доступа к costs
                     if (i < problem.costs.size && j < problem.costs[0].size) {
                         v[j] = problem.costs[i][j] - u[i]
                         updated = true
                     }
                 } else if (u[i].isNaN() && !v[j].isNaN()) {
-                    // Проверяем границы для доступа к costs
                     if (i < problem.costs.size && j < problem.costs[0].size) {
                         u[i] = problem.costs[i][j] - v[j]
                         updated = true
@@ -389,8 +404,6 @@ class Potential(private val isMinimization: Boolean) {
                 }
             }
         }
-
-        // Проверка, что все потенциалы определены
         for (i in 0 until rows) {
             if (u[i].isNaN()) {
                 Log.w("Potential", "Потенциал u[$i] не определен, устанавливаем 0")
@@ -406,6 +419,24 @@ class Potential(private val isMinimization: Boolean) {
         }
 
         return Pair(u, v)
+    }
+
+    private fun isCellBasicZero(solution: Array<DoubleArray>, row: Int, col: Int): Boolean {
+        var rowNonZeros = 0
+        var colNonZeros = 0
+
+        for (j in solution[row].indices) {
+            if (solution[row][j] > EPSILON) {
+                rowNonZeros++
+            }
+        }
+
+        for (i in solution.indices) {
+            if (solution[i][col] > EPSILON) {
+                colNonZeros++
+            }
+        }
+        return rowNonZeros == 0 || colNonZeros == 0
     }
 
     private fun calculateTotalCost(
@@ -744,7 +775,8 @@ class Potential(private val isMinimization: Boolean) {
     private fun createInitialStep(
         context: Context,
         problem: TransportationProblem,
-        solution: Array<DoubleArray>
+        solution: Array<DoubleArray>,
+        basicZeroCells: List<Pair<Int, Int>> = emptyList()  // Добавляем этот параметр
     ): OptimizationStep {
         val totalCost = calculateTotalCost(problem, solution)
 
@@ -757,7 +789,8 @@ class Potential(private val isMinimization: Boolean) {
                 totalCost
             ),
             currentSolution = copyMatrix(solution),
-            totalCost = totalCost
+            totalCost = totalCost,
+            basicZeroCells = basicZeroCells  // Передаем список базисных нулей
         )
     }
 
