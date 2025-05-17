@@ -21,6 +21,18 @@ class Potential(private val isMinimization: Boolean) {
         try {
             val steps = mutableListOf<OptimizationStep>()
 
+            // Логируем базисные нули для отладки
+            Log.d("Potential", "Получены базисные нули: $initialBasicZeroCells")
+            val solution = copyMatrix(initialSolution)
+
+            val basicZeroCells = initialBasicZeroCells.toMutableList()
+            Log.d("DEBUG", "Базисные нули получены в оптимизаторе: $initialBasicZeroCells")
+            steps.add(createInitialStep(context, problem, solution, basicZeroCells)) // ИСПРАВЛЕНО
+
+            // Проверяем и исправляем вырожденность плана
+            if (ensureNonDegeneratePlan(solution, basicZeroCells)) { // ИСПРАВЛЕНО
+                steps.add(createDegeneracyFixStep(context, problem, solution, steps.size + 1))
+            }
             if (initialSolution.size < problem.costs.size || initialSolution[0].size < problem.costs[0].size) {
                 Log.e("Potential", "Несоответствие размеров: решение ${initialSolution.size}x${initialSolution[0].size}, " +
                         "задача ${problem.costs.size}x${problem.costs[0].size}")
@@ -38,20 +50,8 @@ class Potential(private val isMinimization: Boolean) {
                 )
             }
 
-            // Копируем решение
-            val solution = copyMatrix(initialSolution)
-            val initialBasicZeroCells = mutableListOf<Pair<Int, Int>>()
-
-            // Добавляем шаг с исходным планом
-            steps.add(createInitialStep(context, problem, solution, initialBasicZeroCells))
-
-            // Проверяем и исправляем вырожденность плана
-            if (ensureNonDegeneratePlan(solution)) {
-                steps.add(createDegeneracyFixStep(context, problem, solution, steps.size + 1))
-            }
-
             try {
-                val potentials = safeCalculatePotentials(problem, solution)
+                val potentials = safeCalculatePotentials(problem, solution, basicZeroCells)
                 if (potentials == null) {
                     // Если не удалось вычислить потенциалы, добавляем ошибку и возвращаем
                     steps.add(
@@ -183,7 +183,7 @@ class Potential(private val isMinimization: Boolean) {
                     steps.add(createRedistributionStep(context, problem, solution, steps.size + 1))
 
                     // Пересчитываем потенциалы и оценки с проверкой
-                    val newPotentials = safeCalculatePotentials(problem, solution)
+                    val newPotentials = safeCalculatePotentials(problem, solution, basicZeroCells)
                     if (newPotentials == null) {
                         // Если не удалось пересчитать потенциалы
                         steps.add(
@@ -292,28 +292,37 @@ class Potential(private val isMinimization: Boolean) {
     private fun copyMatrix(matrix: Array<DoubleArray>): Array<DoubleArray> {
         return Array(matrix.size) { i -> matrix[i].clone() }
     }
+    private fun countOccupiedCells(solution: Array<DoubleArray>, basicZeroCells: List<Pair<Int, Int>>): Int {
+        var count = 0
+        for (i in solution.indices) {
+            for (j in solution[0].indices) {
+                if (solution[i][j] > EPSILON || basicZeroCells.contains(Pair(i, j))) {
+                    count++
+                }
+            }
+        }
+        return count
+    }
 
-    private fun ensureNonDegeneratePlan(solution: Array<DoubleArray>): Boolean {
+    private fun ensureNonDegeneratePlan(
+        solution: Array<DoubleArray>,
+        basicZeroCells: List<Pair<Int, Int>> = emptyList()
+    ): Boolean {
         val rows = solution.size
         val cols = solution[0].size
         val requiredBasisCells = rows + cols - 1
 
-        // Находим текущие базисные клетки (с положительными поставками)
         val basisCells = mutableSetOf<Pair<Int, Int>>()
         for (i in 0 until rows) {
             for (j in 0 until cols) {
-                if (solution[i][j] > EPSILON) {
+                if (solution[i][j] > EPSILON || basicZeroCells.contains(Pair(i, j))) {
                     basisCells.add(Pair(i, j))
                 }
             }
         }
-
-        // Если количество базисных клеток достаточно, план не вырожден
         if (basisCells.size >= requiredBasisCells) {
             return false
         }
-
-        // План вырожден, добавляем ε-поставки вместо нулевых
         var added = 0
         for (i in 0 until rows) {
             for (j in 0 until cols) {
@@ -333,22 +342,22 @@ class Potential(private val isMinimization: Boolean) {
         return added > 0
     }
 
-    // Безопасное вычисление потенциалов с возможностью вернуть null в случае ошибки
     private fun safeCalculatePotentials(
         problem: TransportationProblem,
-        solution: Array<DoubleArray>
+        solution: Array<DoubleArray>,
+        basicZeroCells: List<Pair<Int, Int>> = emptyList()
     ): Pair<DoubleArray, DoubleArray>? {
         try {
-            return calculatePotentials(problem, solution)
+            return calculatePotentials(problem, solution, basicZeroCells)
         } catch (e: Exception) {
             Log.e("Potential", "Ошибка при вычислении потенциалов", e)
             return null
         }
     }
-
     private fun calculatePotentials(
         problem: TransportationProblem,
-        solution: Array<DoubleArray>
+        solution: Array<DoubleArray>,
+        basicZeroCells: List<Pair<Int, Int>> = emptyList() // Добавлен параметр со списком базисных нулей
     ): Pair<DoubleArray, DoubleArray> {
         val rows = solution.size
         val cols = solution[0].size
@@ -359,6 +368,7 @@ class Potential(private val isMinimization: Boolean) {
 
         val basisCells = mutableListOf<Pair<Int, Int>>()
 
+        // Добавляем ячейки с положительными значениями
         for (i in 0 until rows) {
             for (j in 0 until cols) {
                 if (i < problem.costs.size && j < problem.costs[0].size && solution[i][j] > EPSILON) {
@@ -366,17 +376,30 @@ class Potential(private val isMinimization: Boolean) {
                 }
             }
         }
+
+        // Добавляем базисные нули из переданного списка
+        for ((i, j) in basicZeroCells) {
+            if (i < rows && j < cols && i < problem.costs.size && j < problem.costs[0].size &&
+                !basisCells.contains(Pair(i, j))) {
+                basisCells.add(Pair(i, j))
+                Log.d("Potential", "Добавлен базисный ноль из списка в расчет потенциалов: ($i, $j)")
+            }
+        }
+
+        // Автоматическое определение базисных нулей (можно оставить для страховки)
         for (i in 0 until rows) {
             for (j in 0 until cols) {
                 if (i < problem.costs.size && j < problem.costs[0].size &&
                     solution[i][j] == 0.0 &&
                     !basisCells.contains(Pair(i, j)) &&
-                    isCellBasicZero(solution, i, j)) {
+                    isCellBasicZero(solution, i, j, basicZeroCells)) { // Передаем список базисных нулей
                     basisCells.add(Pair(i, j))
-                    Log.d("Potential", "Добавлен базисный ноль в расчет потенциалов: ($i, $j)")
+                    Log.d("Potential", "Автоматически добавлен базисный ноль в расчет потенциалов: ($i, $j)")
                 }
             }
         }
+        // Логируем финальный список базисных ячеек
+        Log.d("DEBUG", "Финальный список базисных ячеек: $basisCells")
 
         var updated = true
         var iterations = 0
@@ -404,6 +427,7 @@ class Potential(private val isMinimization: Boolean) {
                 }
             }
         }
+
         for (i in 0 until rows) {
             if (u[i].isNaN()) {
                 Log.w("Potential", "Потенциал u[$i] не определен, устанавливаем 0")
@@ -421,7 +445,17 @@ class Potential(private val isMinimization: Boolean) {
         return Pair(u, v)
     }
 
-    private fun isCellBasicZero(solution: Array<DoubleArray>, row: Int, col: Int): Boolean {
+    private fun isCellBasicZero(
+        solution: Array<DoubleArray>,
+        row: Int,
+        col: Int,
+        basicZeroCells: List<Pair<Int, Int>> = emptyList() // Добавляем опциональный параметр
+    ): Boolean {
+        // Если клетка уже в списке базисных нулей, возвращаем true
+        if (basicZeroCells.contains(Pair(row, col))) {
+            return true
+        }
+
         var rowNonZeros = 0
         var colNonZeros = 0
 
@@ -436,7 +470,11 @@ class Potential(private val isMinimization: Boolean) {
                 colNonZeros++
             }
         }
-        return rowNonZeros == 0 || colNonZeros == 0
+
+        val isIdentifiedBasicZero = solution[row][col] == 0.0 &&
+                (rowNonZeros == 0 || colNonZeros == 0)
+
+        return isIdentifiedBasicZero
     }
 
     private fun calculateTotalCost(
@@ -480,7 +518,8 @@ class Potential(private val isMinimization: Boolean) {
 
     private fun checkOptimality(
         solution: Array<DoubleArray>,
-        evaluations: Array<DoubleArray>
+        evaluations: Array<DoubleArray>,
+        basicZeroCells: List<Pair<Int, Int>> = emptyList()
     ): Pair<Boolean, Pair<Int, Int>?> {
         val rows = evaluations.size
         val cols = evaluations[0].size
@@ -491,8 +530,8 @@ class Potential(private val isMinimization: Boolean) {
 
         for (i in 0 until rows) {
             for (j in 0 until cols) {
-                // Пропускаем базисные клетки
-                if (solution[i][j] > EPSILON) continue
+                // Пропускаем базисные клетки и базисные нули
+                if (solution[i][j] > EPSILON || basicZeroCells.contains(Pair(i, j))) continue
 
                 val value = evaluations[i][j]
 
@@ -505,8 +544,6 @@ class Potential(private val isMinimization: Boolean) {
             }
         }
 
-        // Для минимизации план оптимален, если все оценки >= 0
-        // Для максимизации план оптимален, если все оценки <= 0
         return Pair(
             (isMinimization && bestEvaluation >= -EPSILON) ||
                     (!isMinimization && bestEvaluation <= EPSILON),
@@ -798,7 +835,8 @@ class Potential(private val isMinimization: Boolean) {
         context: Context,
         problem: TransportationProblem,
         solution: Array<DoubleArray>,
-        stepNumber: Int
+        stepNumber: Int,
+        basicZeroCells: List<Pair<Int, Int>> = emptyList() // Добавьте этот параметр
     ): OptimizationStep {
         val totalCost = calculateTotalCost(problem, solution)
 
@@ -806,7 +844,8 @@ class Potential(private val isMinimization: Boolean) {
             stepNumber = stepNumber,
             description = context.getString(R.string.optimization_fix_degeneracy),
             currentSolution = copyMatrix(solution),
-            totalCost = totalCost
+            totalCost = totalCost,
+            basicZeroCells = ArrayList(basicZeroCells) // Передаем базисные нули
         )
     }
 

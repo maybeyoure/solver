@@ -14,7 +14,7 @@ class TransportationProblem(
     val demands: DoubleArray
 ) : Serializable {
 
-    fun solve(context: Context, methodType: String): Array<DoubleArray> {
+    private fun solve(context: Context, methodType: String): Array<DoubleArray> {
         val methods = context.resources.getStringArray(R.array.methods)
         return when (methodType) {
             methods[0] -> DoublePreferenceSolver(this).solve(context)
@@ -42,7 +42,7 @@ class TransportationProblem(
 
     }
 
-    fun optimizeSolution(
+    private fun optimizeSolution(
         context: Context,
         methodType: String,
         objectiveType: String
@@ -82,7 +82,9 @@ class TransportationProblem(
 
             // Получаем список базисных нулей из последнего шага
             val initialBasicZeroCells = if (solutionSteps.isNotEmpty()) {
-                solutionSteps.last().basicZeroCells ?: emptyList()
+                val cells = solutionSteps.last().basicZeroCells ?: emptyList()
+                Log.d("DEBUG", "Базисные нули из последнего шага решения: $cells")
+                cells
             } else {
                 emptyList()
             }
@@ -93,13 +95,12 @@ class TransportationProblem(
 
             Log.d("TransportationProblem", "Оптимизация: тип=$objectiveType, минимизация=$isMinimization")
 
-            // Создаем оптимизатор и выполняем оптимизацию
             val optimizer = Potential(isMinimization)
             return optimizer.optimizeWithSteps(
                 context,
                 this,
                 initialSolution,
-                initialBasicZeroCells  // Передаем список базисных нулей
+                initialBasicZeroCells
             )
         } catch (e: Exception) {
             Log.e("TransportationProblem", "Ошибка при оптимизации: ${e.message}", e)

@@ -179,7 +179,7 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
                 if (excludedCols[j] || usedCells[i][j]) continue
 
                 val cost = balancedProblem.costs[i][j]
-                if (abs(cost - minValue) < EPSILON) { // Используем EPSILON для сравнения с плавающей точкой
+                if (abs(cost - minValue) < EPSILON) {
                     rowMinIndices.add(Pair(i, j))
                 }
             }
@@ -211,8 +211,6 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
                 }
             }
         }
-
-        // Для отладки выводим найденные минимумы
         Log.d("DoublePreferenceSolver", "Row minimum indices: $rowMinIndices")
         Log.d("DoublePreferenceSolver", "Column minimum indices: $colMinIndices")
 
@@ -222,7 +220,6 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
                 colCell.first == rowCell.first && colCell.second == rowCell.second
             }
         }
-
         Log.d("DoublePreferenceSolver", "Double preference cells: $doublePreferredCells")
 
         // 4. Находим клетки с одинарным предпочтением
@@ -230,7 +227,6 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
         val singlePreferredCells = allPreferredCells.filter { cell ->
             !doublePreferredCells.contains(cell)
         }
-
         Log.d("DoublePreferenceSolver", "Single preference cells: $singlePreferredCells")
 
         return Pair(doublePreferredCells, singlePreferredCells)
@@ -366,7 +362,6 @@ class DoublePreferenceSolver(private val problem: TransportationProblem) : Trans
                 "Fictive single preference cells: $fictiveSinglePreferenceCells"
             )
 
-// Затем обрабатываем фиктивные пути
             while (remainingSupplies.any { it > 0 } && remainingDemands.any { it > 0 }) {
                 val (selectedRow, selectedCol, isBasicZero) = selectCell(
                     balancedProblem,

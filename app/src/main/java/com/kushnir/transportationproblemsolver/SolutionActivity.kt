@@ -24,7 +24,6 @@ import com.kushnir.transportationproblemsolver.optimizers.OptimizationStep
 class SolutionActivity : AppCompatActivity() {
     private lateinit var balanceConditionText: TextView
     private lateinit var solutionStepsContainer: LinearLayout
-    private lateinit var resultTextView: TextView
     private var isVogelMethod = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,7 +37,6 @@ class SolutionActivity : AppCompatActivity() {
         try {
             balanceConditionText = findViewById(R.id.balance_condition_text)
             solutionStepsContainer = findViewById(R.id.solution_steps_container)
-            resultTextView = findViewById(R.id.result_text_view)
             val methodTitleText = findViewById<TextView>(R.id.method_title_text)
 
             val problem = intent.getSerializableExtra("problem") as? TransportationProblem
@@ -147,7 +145,8 @@ class SolutionActivity : AppCompatActivity() {
                         step.currentSolution,
                         balancedProblem,
                         step.rowPenalties,
-                        step.colPenalties
+                        step.colPenalties,
+                        step // Передаем шаг с информацией о базисных нулях
                     )
                     horizontalScrollView.addView(matrixTable)
                 } else {
@@ -166,7 +165,6 @@ class SolutionActivity : AppCompatActivity() {
         try {
             if (solutionSteps.isNotEmpty()) {
                 val totalCost = calculateTotalCost(solutionSteps.last().currentSolution, balancedProblem)
-                resultTextView.text = getString(R.string.total_cost, totalCost)
             }
         } catch (e: Exception) {
             Log.e("SolutionActivity", "Error calculating total cost", e)
@@ -296,7 +294,8 @@ class SolutionActivity : AppCompatActivity() {
         solution: Array<DoubleArray>,
         problem: TransportationProblem,
         rowPenalties: DoubleArray,
-        colPenalties: DoubleArray
+        colPenalties: DoubleArray,
+        step: SolutionStep // Добавлен параметр step для получения информации о базисных нулях
     ): TableLayout {
         return TableLayout(this).apply {
             layoutParams = TableLayout.LayoutParams(
@@ -351,17 +350,25 @@ class SolutionActivity : AppCompatActivity() {
                     // Значения решения
                     for (j in solution[i].indices) {
                         addView(TextView(context).apply {
-                            text = if (solution[i][j] > 0) {
-                                String.format("%.0f", solution[i][j])
+                            // Проверяем, является ли эта клетка базисным нулем
+                            val isCurrentCellBasicZero = step.basicZeroCells?.any { it.first == i && it.second == j } == true
+
+                            // Выбираем текст для отображения
+                            text = if (isCurrentCellBasicZero) {
+                                "0" // Отображаем базисный нуль как "0"
+                            } else if (solution[i][j] > 0) {
+                                String.format("%.0f", solution[i][j]) // Положительное значение
                             } else {
-                                "-"
+                                "-" // Пустая клетка
                             }
+
                             gravity = Gravity.CENTER
                             minWidth = 80
                             setPadding(8, 8, 8, 8)
 
                             // Если ячейка фиктивная, выделим её другим цветом
-                            if ((i >= problem.costs.size || j >= problem.costs[0].size) && solution[i][j] > 0) {
+                            if ((i >= problem.costs.size || j >= problem.costs[0].size) &&
+                                (solution[i][j] > 0 || isCurrentCellBasicZero)) {
                                 setBackgroundColor(Color.parseColor("#FFECB3")) // Светло-жёлтый для фиктивных путей
                             }
                         })
@@ -460,7 +467,6 @@ class SolutionActivity : AppCompatActivity() {
             })
         }
     }
-
     private fun displayOptimizationSteps(optimizationSteps: List<OptimizationStep>, problem: TransportationProblem) {
         // Добавляем заголовок секции оптимизации
         val optimizationHeader = TextView(this).apply {
@@ -473,11 +479,8 @@ class SolutionActivity : AppCompatActivity() {
         val firstStep = optimizationSteps.firstOrNull() ?: return
         val solutionMatrix = firstStep.currentSolution
         val basicZeroCells = firstStep.basicZeroCells ?: emptyList()
+
         var occupiedCells = 0
-        // Проверка на вырожденность
-        val rows = solutionMatrix.size
-        val cols = solutionMatrix[0].size
-        val requiredCells = rows + cols - 1
         for (i in solutionMatrix.indices) {
             for (j in solutionMatrix[i].indices) {
                 if (solutionMatrix[i][j] > 0 || basicZeroCells.contains(Pair(i, j))) {
@@ -485,6 +488,9 @@ class SolutionActivity : AppCompatActivity() {
                 }
             }
         }
+        val rows = solutionMatrix.size
+        val cols = solutionMatrix[0].size
+        val requiredCells = rows + cols - 1
         val isDegeneratePlan = occupiedCells < requiredCells
 
         val degeneracyInfo = TextView(this).apply {
@@ -862,26 +868,24 @@ class SolutionActivity : AppCompatActivity() {
     ): String {
         val terms = mutableListOf<String>()
 
-        // Проходим по всем ячейкам матрицы
         for (i in solution.indices) {
             for (j in solution[i].indices) {
-                // Проверяем, что индексы в пределах матрицы стоимостей
                 if (i < costs.size && j < costs[0].size) {
-                    // Ячейка с положительным значением
                     if (solution[i][j] > 0) {
-                        // Форматируем как "стоимость*количество"
                         terms.add("${costs[i][j].toInt()}*${solution[i][j].toInt()}")
-                    }
-                    // Базисный нуль - включаем в формулу
-                    else if (basicZeroCells?.contains(Pair(i, j)) == true) {
-                        // Для базисных нулей показываем "стоимость*0"
+                    } else if (basicZeroCells?.contains(Pair(i, j)) == true) {
                         terms.add("${costs[i][j].toInt()}*0")
+                    }
+                } else {
+                    if (solution[i][j] > 0) {
+                        terms.add("0*${solution[i][j].toInt()}")
+                    } else if (basicZeroCells?.contains(Pair(i, j)) == true) {
+                        terms.add("0*0")
                     }
                 }
             }
         }
 
-        // Соединяем все члены знаком плюс
         return terms.joinToString(" + ")
     }
 }
